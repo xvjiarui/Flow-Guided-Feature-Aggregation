@@ -157,7 +157,7 @@ def get_double_image(roidb, config, is_train=True):
         if not is_train:
             print('cur', image_path)
         if roi_rec.has_key('pattern'):
-            ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(config.TRAIN.MIN_OFFSET, config.TRAIN.MAX_OFFSET+1), 0),roi_rec['frame_seg_len']-1)
+            ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(min_offset, max_offset+1), 0),roi_rec['frame_seg_len']-1)
             ref_image = roi_rec['pattern'] % ref_id
             # print('ref', ref_image)
             assert os.path.exists(ref_image), '{} does not exist'.format(ref_image)
@@ -167,7 +167,7 @@ def get_double_image(roidb, config, is_train=True):
             ref_roi_rec = load_roi_rec(ref_annotation)
             ref_roi_rec['image'] = ref_image
             # in case of empty gt
-            while is_train and len(ref_roi_rec['gt_classes']) == 0 and ref_id < roi_rec['frame_seg_id']+max(0, config.TRAIN.MAX_OFFSET):
+            while is_train and len(ref_roi_rec['gt_classes']) == 0 and ref_id < roi_rec['frame_seg_id']+max(0, max_offset):
                 ref_id += 1
                 ref_image = roi_rec['pattern'] % ref_id
                 assert os.path.exists(ref_image), '{} does not exist'.format(ref_image)

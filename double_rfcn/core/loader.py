@@ -108,6 +108,8 @@ class TestLoader(mx.io.DataIter):
     def get_batch(self):
         cur_roidb = self.roidb[self.cur_roidb_index].copy()
         cur_roidb['image'] = cur_roidb['pattern'] % self.cur_frameid
+        # update seg_id
+        cur_roidb['frame_seg_id'] = self.cur_frameid
         self.cur_seg_len = cur_roidb['frame_seg_len']
         data, label, im_info = get_rpn_double_testbatch([cur_roidb], self.cfg)
         if self.cur_frameid == 0: # new video
