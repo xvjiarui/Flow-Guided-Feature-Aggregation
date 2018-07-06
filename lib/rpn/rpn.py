@@ -26,7 +26,7 @@ label =
 import numpy as np
 import numpy.random as npr
 
-from utils.image import get_image, get_pair_image, get_triple_image, tensor_vstack
+from utils.image import get_image, get_pair_image, get_double_image, tensor_vstack
 from generate_anchor import generate_anchors
 from bbox.bbox_transform import bbox_overlaps, bbox_transform
 
@@ -105,6 +105,79 @@ def get_rpn_pair_batch(roidb, cfg):
 
     return data, label
     
+def get_rpn_double_batch(roidb, cfg):
+    """
+    prototype for rpn batch: data, im_info, gt_boxes
+    :param roidb: ['image', 'flipped'] + ['gt_boxes', 'boxes', 'gt_classes']
+    :return: data, label
+    """
+    assert len(roidb) == 1, 'Single batch only'
+    imgs, roidb = get_double_image(roidb, cfg)
+
+    # [2, c, h , w]
+    im_array = imgs[0]
+    roidb = roidb[0]
+
+    assert len(im_array) == 2, "num of images must be 2"
+    assert roidb['num_imgs'] == 2, "num of images must be 2"
+    assert len(roidb['all_boxes']) == 2, "num of images must be 2"
+
+    im_info = np.array([roidb['im_info']], dtype=np.float32)
+
+    # gt boxes: (x1, y1, x2, y2, cls)
+    all_gt_boxes = []
+    for i in range(roidb['num_imgs']):
+        gt_classes = roidb['all_gt_classes'][i]
+        boxes = roidb['all_boxes'][i]
+        if gt_classes.size > 0:
+            gt_inds = np.where(gt_classes != 0)[0]
+            gt_boxes = np.empty((boxes.shape[0], 5), dtype=np.float32)
+            gt_boxes[:, 0:4] = boxes[gt_inds, :]
+            gt_boxes[:, 4] = gt_classes[gt_inds]
+        else:
+            gt_boxes = np.empty((0, 5), dtype=np.float32)
+        all_gt_boxes.append(gt_boxes)
+
+
+
+    data = {'data': im_array,
+            'im_info': im_info}
+    label = {'all_gt_boxes': all_gt_boxes}
+
+    return data, label
+
+def get_rpn_double_testbatch(roidb, cfg):
+    """
+    prototype for rpn batch: data, im_info, gt_boxes
+    :param roidb: ['image', 'flipped'] + ['gt_boxes', 'boxes', 'gt_classes']
+    :return: data, label
+    """
+    imgs, roidb = get_double_image(roidb, cfg, False)
+    im_array = imgs
+    im_info = [np.array([roidb[i]['im_info']], dtype=np.float32) for i in range(len(roidb))]
+
+    data = [{'data': im_array[i], 
+            'im_info': im_info[i] } for i in range(len(roidb))]
+
+    label = []
+    for cur_roidb in roidb:
+        all_gt_boxes = []
+        for i in range(len(imgs)):
+            gt_classes = cur_roidb['all_gt_classes'][i]
+            boxes = cur_roidb['all_boxes'][i]
+            if gt_classes.size > 0:
+                gt_inds = np.where(gt_classes != 0)[0]
+                gt_boxes = np.empty((1, boxes.shape[0], 5), dtype=np.float32)
+                gt_boxes[0, :, 0:4] = boxes[gt_inds, :]
+                gt_boxes[0, :, 4] = gt_classes[gt_inds]
+            else:
+                gt_boxes = np.empty((1, 0, 5), dtype=np.float32)
+            all_gt_boxes.append(gt_boxes)
+
+        label.append({'gt_boxes': all_gt_boxes})
+
+    return data, label, im_info
+
 def get_rpn_triple_batch(roidb, cfg):
     """
     prototype for rpn batch: data, im_info, gt_boxes

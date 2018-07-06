@@ -12,6 +12,13 @@ import random
 from PIL import Image
 from bbox.bbox_transform import clip_boxes
 
+num_empty_gt = 0
+def imread(image_path, arg):
+    if '.zip@' in image_path:
+        im = phillyzip.imread(image_path, arg)
+    else:
+        im = cv2.imread(image_path, arg)
+    return im
 
 # TODO: This two functions should be merged with individual data loader
 def get_image(roidb, config):
@@ -44,6 +51,183 @@ def get_image(roidb, config):
         new_rec['boxes'] = clip_boxes(np.round(roi_rec['boxes'].copy() * im_scale), im_info[:2])
         new_rec['im_info'] = im_info
         processed_roidb.append(new_rec)
+    return processed_ims, processed_roidb
+
+def get_double_image(roidb, config, is_train=True):
+    """
+    preprocess image and return processed roidb
+    :param roidb: a list of roidb
+    :return: list of img as in mxnet format
+    roidb add new item['im_info']
+    0 --- x (width, second dim of im)
+    |
+    y (height, first dim of im)
+    """
+    num_images = len(roidb)
+    processed_ims = []
+    processed_ref_ims = []
+    processed_roidb = []
+    processed_ref_roidb = []
+    min_offset = config.TRAIN.MIN_OFFSET if is_train else config.TEST.MIN_OFFSET
+    max_offset = config.TRAIN.MAX_OFFSET if is_train else config.TEST.MAX_OFFSET
+    def load_roi_rec(filename, old_roi_rec=None):
+
+        num_classes = 31
+
+        classes_map = ['__background__',  # always index 0
+                        'n02691156', 'n02419796', 'n02131653', 'n02834778',
+                        'n01503061', 'n02924116', 'n02958343', 'n02402425',
+                        'n02084071', 'n02121808', 'n02503517', 'n02118333',
+                        'n02510455', 'n02342885', 'n02374451', 'n02129165',
+                        'n01674464', 'n02484322', 'n03790512', 'n02324045',
+                        'n02509815', 'n02411705', 'n01726692', 'n02355227',
+                        'n02129604', 'n04468005', 'n01662784', 'n04530566',
+                        'n02062744', 'n02391049']
+        import xml.etree.ElementTree as ET
+        roi_rec = dict()
+        if old_roi_rec != None:
+            roi_rec['pattern'] = old_roi_rec['pattern']
+            roi_rec['frame_seg_id'] = old_roi_rec['frame_seg_id']
+            roi_rec['frame_seg_len'] = old_roi_rec['frame_seg_len']
+
+        tree = ET.parse(filename)
+        size = tree.find('size')
+        roi_rec['height'] = float(size.find('height').text)
+        roi_rec['width'] = float(size.find('width').text)
+        #im_size = cv2.imread(roi_rec['image'], cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION).shape
+        #assert im_size[0] == roi_rec['height'] and im_size[1] == roi_rec['width']
+
+        objs = tree.findall('object')
+        num_objs = len(objs)
+
+        boxes = np.zeros((num_objs, 4), dtype=np.uint16)
+        gt_classes = np.zeros((num_objs), dtype=np.int32)
+        overlaps = np.zeros((num_objs, num_classes), dtype=np.float32)
+        valid_objs = np.zeros((num_objs), dtype=np.bool)
+
+        class_to_index = dict(zip(classes_map, range(num_classes)))
+        # Load object bounding boxes into a data frame.
+        for ix, obj in enumerate(objs):
+            bbox = obj.find('bndbox')
+            # Make pixel indexes 0-based
+            x1 = np.maximum(float(bbox.find('xmin').text), 0)
+            y1 = np.maximum(float(bbox.find('ymin').text), 0)
+            x2 = np.minimum(float(bbox.find('xmax').text), roi_rec['width']-1)
+            y2 = np.minimum(float(bbox.find('ymax').text), roi_rec['height']-1)
+            if not class_to_index.has_key(obj.find('name').text):
+                continue
+            valid_objs[ix] = True
+            cls = class_to_index[obj.find('name').text.lower().strip()]
+            boxes[ix, :] = [x1, y1, x2, y2]
+            gt_classes[ix] = cls
+            overlaps[ix, cls] = 1.0
+
+        boxes = boxes[valid_objs, :]
+        gt_classes = gt_classes[valid_objs]
+        overlaps = overlaps[valid_objs, :]
+
+        assert (boxes[:, 2] >= boxes[:, 0]).all()
+
+        roi_rec.update({'boxes': boxes,
+                        'gt_classes': gt_classes,
+                        'gt_overlaps': overlaps,
+                        'max_classes': overlaps.argmax(axis=1),
+                        'max_overlaps': overlaps.max(axis=1),
+                        'flipped': False})
+        return roi_rec
+
+    for i in range(num_images):
+        roi_rec = roidb[i]
+
+        image_path = roi_rec['image']
+        assert os.path.exists(roi_rec['image']), '{} does not exist'.format(roi_rec['image'])
+        # if '.zip@' in image_path:
+        #     im = phillyzip.imread(image_path, cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)
+        # else:
+        #     # print('cur', image_path)
+        #     im = cv2.imread(image_path, cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)
+        im = imread(image_path, cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)
+        # update annotation when VisTest need label
+        annotation = image_path.replace("Data", "Annotations").replace("JPEG","xml")
+        assert os.path.exists(annotation), '{} does not exist'.format(annotation)
+        # when not training, update boxes info
+        if not is_train:
+            roi_rec = load_roi_rec(annotation, roi_rec)
+
+        if not is_train:
+            print('cur', image_path)
+        if roi_rec.has_key('pattern'):
+            ref_id = min(max(roi_rec['frame_seg_id'] + np.random.randint(config.TRAIN.MIN_OFFSET, config.TRAIN.MAX_OFFSET+1), 0),roi_rec['frame_seg_len']-1)
+            ref_image = roi_rec['pattern'] % ref_id
+            # print('ref', ref_image)
+            assert os.path.exists(ref_image), '{} does not exist'.format(ref_image)
+
+            ref_annotation = ref_image.replace("Data", "Annotations").replace("JPEG","xml")
+            assert os.path.exists(ref_annotation), '{} does not exist'.format(ref_annotation)
+            ref_roi_rec = load_roi_rec(ref_annotation)
+            ref_roi_rec['image'] = ref_image
+            # in case of empty gt
+            while is_train and len(ref_roi_rec['gt_classes']) == 0 and ref_id < roi_rec['frame_seg_id']+max(0, config.TRAIN.MAX_OFFSET):
+                ref_id += 1
+                ref_image = roi_rec['pattern'] % ref_id
+                assert os.path.exists(ref_image), '{} does not exist'.format(ref_image)
+                ref_annotation = ref_image.replace("Data", "Annotations").replace("JPEG","xml")
+                assert os.path.exists(ref_annotation), '{} does not exist'.format(ref_annotation)
+                ref_roi_rec = load_roi_rec(ref_annotation)
+                ref_roi_rec['image'] = ref_image
+                global num_empty_gt
+                num_empty_gt += 1
+                print "empty gt {}".format(num_empty_gt)
+
+            ref_im = imread(ref_image, cv2.IMREAD_COLOR|cv2.IMREAD_IGNORE_ORIENTATION)
+            if not is_train:
+                print('ref', ref_image)
+        else:
+            ref_im = im.copy()
+            ref_roi_rec = roi_rec.copy()
+
+        if roidb[i]['flipped']:
+            im = im[:, ::-1, :]
+            ref_im = ref_im[:, ::-1, :]
+
+        # new_rec = roi_rec.copy()
+        new_rec = {}
+        new_rec['num_imgs'] = 2
+        new_rec['all_boxes'] = []
+        new_rec['all_gt_classes'] = []
+
+
+        scale_ind = random.randrange(len(config.SCALES))
+        target_size = config.SCALES[scale_ind][0]
+        max_size = config.SCALES[scale_ind][1]
+
+        im, im_scale = resize(im, target_size, max_size, stride=config.network.IMAGE_STRIDE)
+        im_tensor = transform(im, config.network.PIXEL_MEANS)
+
+        im_info = [im_tensor.shape[2], im_tensor.shape[3], im_scale]
+        im_tensor = transform(im, config.network.PIXEL_MEANS)
+
+        new_rec['im_info'] = im_info
+
+        new_rec['all_boxes'].append(roi_rec['boxes'].copy() * im_scale)
+        new_rec['all_gt_classes'].append(roi_rec['gt_classes'].copy())
+
+        new_ref_rec = ref_roi_rec.copy()
+
+        ref_im, ref_im_scale = resize(ref_im, target_size, max_size, stride=config.network.IMAGE_STRIDE)
+        ref_im_tensor = transform(ref_im, config.network.PIXEL_MEANS)
+
+        ref_im_info = [ref_im_tensor.shape[2], ref_im_tensor.shape[3], ref_im_scale]
+        assert ref_im_info == im_info, "double image info should be same {} vs {}".format(im_info, ref_im_info)
+
+        new_rec['all_boxes'].append(ref_roi_rec['boxes'].copy() * ref_im_scale)
+        new_rec['all_gt_classes'].append(ref_roi_rec['gt_classes'].copy())
+        
+        im_tensor = np.vstack((im_tensor, ref_im_tensor))
+
+        processed_ims.append(im_tensor)
+        processed_roidb.append(new_rec)
+
     return processed_ims, processed_roidb
 
 def get_pair_image(roidb, config):

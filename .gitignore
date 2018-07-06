@@ -89,5 +89,6 @@ lib/nms/*.cpp
 external
 output
 model
+data
 
 .db
