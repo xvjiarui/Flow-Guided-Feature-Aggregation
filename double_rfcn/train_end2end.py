@@ -123,13 +123,13 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
     params_loaded = False
     if config.TRAIN.RESUME:
         arg_params, aux_params = load_param(prefix, begin_epoch, convert=True)
-        mod._preload_opt_states = '{}-{:04d}.states'.format(prefix, begin_epoch)
+        # mod._preload_opt_states = '{}-{:04d}.states'.format(prefix, begin_epoch)
         print('continue training from ', begin_epoch)
         logger.info('continue training from ', begin_epoch)
         params_loaded = True
-        # sym_instance.init_weight(config, arg_params, aux_params)
-        # print('init nms')
-        # logger.info('init nms')
+        sym_instance.init_weight(config, arg_params, aux_params)
+        print('init nms')
+        logger.info('init nms')
     elif config.TRAIN.AUTO_RESUME:
         for cur_epoch in range(end_epoch-1, begin_epoch, -1):
             params_filename = '{}-{:04d}.params'.format(prefix, cur_epoch)
@@ -165,16 +165,24 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
 
     # decide training params
     # metric
-    rpn_eval_metric = metric.RPNAccMetric()
-    rpn_cls_metric = metric.RPNLogLossMetric()
-    rpn_bbox_metric = metric.RPNL1LossMetric()
     eval_metric = metric.RCNNAccMetric(config)
     cls_metric = metric.RCNNLogLossMetric(config)
     bbox_metric = metric.RCNNL1LossMetric(config)
     eval_metrics = mx.metric.CompositeEvalMetric()
-    # rpn_eval_metric, rpn_cls_metric, rpn_bbox_metric, eval_metric, cls_metric, bbox_metric
-    for child_metric in [rpn_eval_metric, rpn_cls_metric, rpn_bbox_metric, eval_metric, cls_metric, bbox_metric]:
+
+    for child_metric in [eval_metric, cls_metric, bbox_metric]:
         eval_metrics.add(child_metric)
+    if config.TRAIN.JOINT_TRAINING or (not config.TRAIN.LEARN_NMS):
+        rpn_eval_metric = metric.RPNAccMetric()
+        rpn_cls_metric = metric.RPNLogLossMetric()
+        rpn_bbox_metric = metric.RPNL1LossMetric()
+        for child_metric in [rpn_eval_metric, rpn_cls_metric, rpn_bbox_metric]:
+            eval_metrics.add(child_metric)
+    if config.TRAIN.LEARN_NMS:
+        eval_metrics.add(metric.NMSLossMetric(config, 'pos'))
+        eval_metrics.add(metric.NMSLossMetric(config, 'neg'))
+        eval_metrics.add(metric.NMSAccMetric(config))
+        
     # callback
     batch_end_callback = callback.Speedometer(train_data.batch_size, frequent=args.frequent)
     means = np.tile(np.array(config.TRAIN.BBOX_MEANS), 2 if config.CLASS_AGNOSTIC else config.dataset.NUM_CLASSES)

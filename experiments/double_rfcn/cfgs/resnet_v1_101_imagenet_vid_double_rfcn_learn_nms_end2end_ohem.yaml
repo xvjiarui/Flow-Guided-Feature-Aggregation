@@ -2,8 +2,8 @@
 MXNET_VERSION: ""
 output_path: "./output/double_rfcn/imagenet_vid"
 symbol: resnet_v1_101_double_rfcn_learn_nms
-# gpus: '4,5,6,7'
-gpus: '4'
+gpus: '0,1,2,3'
+# gpus: '4'
 CLASS_AGNOSTIC: true
 SCALES:
 - 600
@@ -25,8 +25,9 @@ network:
   RPN_FEAT_STRIDE: 16
   FIXED_PARAMS:
   - conv1
-  - res2
+  - res
   - bn
+  - rpn
   ANCHOR_RATIOS:
   - 0.5
   - 1
@@ -65,7 +66,7 @@ TRAIN:
   end_epoch: 2
   model_prefix: 'double_rfcn_learn_nms_vid'
   # whether resume training
-  RESUME: false
+  RESUME: true
   # whether flip image
   FLIP: true
   # whether shuffle image

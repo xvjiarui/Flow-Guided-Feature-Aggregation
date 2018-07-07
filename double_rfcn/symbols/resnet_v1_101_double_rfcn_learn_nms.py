@@ -276,10 +276,10 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
 
         # prepare rpn data
         concat_rpn_cls_score_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_score, shape=(0, 2, -1, 0), name="rpn_cls_score_reshape")
+            data=concat_rpn_cls_score, shape=(-1, 2, 0, 0), name="rpn_cls_score_reshape")
     
         # classification
-        concat_rpn_cls_prob = mx.sym.SoftmaxOutput(data=concat_rpn_cls_score_reshape, label=concat_rpn_label, multi_output=True,
+        concat_rpn_cls_prob = mx.sym.SoftmaxOutput(data=concat_rpn_cls_score_reshape, label=mx.sym.Reshape(concat_rpn_label, shape=(2*num_anchors, -1)), multi_output=True,
                                                normalization='valid', use_ignore=True, ignore_label=-1, name="rpn_cls_prob")
         # bounding box regression
         if cfg.network.NORMALIZE_RPN:
@@ -295,7 +295,7 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         concat_rpn_cls_act = mx.sym.softmax(
             data=concat_rpn_cls_score_reshape, axis=1, name="rpn_cls_act")
         concat_rpn_cls_act_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_act, shape=(0, 2 * num_anchors, -1, 0), name='rpn_cls_act_reshape')
+            data=concat_rpn_cls_act, shape=(-1, 2 * num_anchors, 0, 0), name='rpn_cls_act_reshape')
 
         rpn_cls_act_reshape, ref_rpn_cls_act_reshape = mx.sym.split(concat_rpn_cls_act_reshape, axis=0, num_outputs=2)
         rpn_bbox_pred, ref_rpn_bbox_pred = mx.sym.split(concat_rpn_bbox_pred, axis=0, num_outputs=2)
@@ -715,13 +715,6 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         self.sym = mx.sym.Group(output_sym_list)
         return self.sym
 
-    def init_rpn_weight(self, cfg, arg_params, aux_params):
-        arg_params['rpn_cls_score_weight'] = mx.random.normal(0, 0.01,
-                                                              shape=self.arg_shape_dict['rpn_cls_score_weight'])
-        arg_params['rpn_cls_score_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rpn_cls_score_bias'])
-        arg_params['rpn_bbox_pred_weight'] = mx.random.normal(0, 0.01,
-                                                              shape=self.arg_shape_dict['rpn_bbox_pred_weight'])
-        arg_params['rpn_bbox_pred_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['rpn_bbox_pred_bias'])
 
     def init_weight_attention_nms_multi_head(self, cfg, arg_params, aux_params, index=1):
         arg_params['nms_pair_pos_fc1_' + str(index) + '_weight'] = mx.random.normal(
@@ -772,7 +765,7 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         arg_params['bbox_pred_bias'] = mx.nd.zeros(shape=self.arg_shape_dict['bbox_pred_bias'])
 
     def init_weight(self, cfg, arg_params, aux_params):
-        self.init_weight_rpn(cfg, arg_params, aux_params)
-        self.init_weight_res(cfg, arg_params, aux_params)
+        # self.init_weight_rpn(cfg, arg_params, aux_params)
+        # self.init_weight_res(cfg, arg_params, aux_params)
         self.init_weight_rfcn(cfg, arg_params, aux_params)
         self.init_weight_nms(cfg, arg_params, aux_params)
