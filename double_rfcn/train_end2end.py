@@ -182,7 +182,7 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
         eval_metrics.add(metric.NMSLossMetric(config, 'pos'))
         eval_metrics.add(metric.NMSLossMetric(config, 'neg'))
         eval_metrics.add(metric.NMSAccMetric(config))
-        
+
     # callback
     batch_end_callback = callback.Speedometer(train_data.batch_size, frequent=args.frequent)
     means = np.tile(np.array(config.TRAIN.BBOX_MEANS), 2 if config.CLASS_AGNOSTIC else config.dataset.NUM_CLASSES)
@@ -217,10 +217,9 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
 
 def main():
     print('Called with argument:', args)
+    if args.usePhilly:
+        config.gpus ='0,1,2,3,4,5,6,7'
     ctx = [mx.gpu(int(i)) for i in config.gpus.split(',')]
-
-    # train_net(args, ctx, config.network.pretrained, config.network.pretrained_flow, config.network.pretrained_epoch, config.TRAIN.model_prefix,
-    #           config.TRAIN.begin_epoch, config.TRAIN.end_epoch, config.TRAIN.lr, config.TRAIN.lr_step)
 
     train_net(args, ctx, config.network.pretrained_dir, config.network.pretrained_resnet, config.network.pretrained_flow, config.network.pretrained_epoch, config.TRAIN.model_prefix,
               config.TRAIN.begin_epoch, config.TRAIN.end_epoch, config.TRAIN.lr, config.TRAIN.lr_step)
