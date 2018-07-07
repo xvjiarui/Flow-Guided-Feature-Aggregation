@@ -254,10 +254,12 @@ def pred_eval(gpu_id, predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, l
     data_names = [k[0] for k in test_data.provide_data[0]]
 
     num_images = test_data.size
+    batch_size = test_data.batch_size
     frame_ids = np.zeros(num_images, dtype=np.int)
     roidb_frame_ids = [x['frame_id'] for x in test_data.roidb]
 
     if not isinstance(test_data, PrefetchingIter):
+        # the test_data.batch_size is changed by PrefetchingIter 1->2, we should stick to 1
         test_data = PrefetchingIter(test_data)
 
     nms = py_nms_wrapper(cfg.TEST.NMS)
@@ -325,7 +327,7 @@ def pred_eval(gpu_id, predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, l
                 boxes_this_image = [[]] + [all_boxes[j][idx+delta] for j in range(1, imdb.num_classes)]
                 vis_all_detection(data_dict['data'].asnumpy(), boxes_this_image, imdb.classes, scales[delta], cfg)
 
-        idx += test_data.batch_size
+        idx += batch_size
         t3 = time.clock() - t
         t = time.clock()
         data_time += t1
