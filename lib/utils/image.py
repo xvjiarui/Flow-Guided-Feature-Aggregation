@@ -11,6 +11,7 @@ import cv2
 import random
 from PIL import Image
 from bbox.bbox_transform import clip_boxes
+import phillyzip
 
 num_empty_gt = 0
 def imread(image_path, arg):
