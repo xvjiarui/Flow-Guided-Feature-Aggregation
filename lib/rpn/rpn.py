@@ -162,19 +162,19 @@ def get_rpn_double_testbatch(roidb, cfg):
     label = []
     for cur_roidb in roidb:
         all_gt_boxes = []
-        for i in range(len(imgs)):
+        for i in range(cur_roidb['num_imgs']):
             gt_classes = cur_roidb['all_gt_classes'][i]
             boxes = cur_roidb['all_boxes'][i]
             if gt_classes.size > 0:
                 gt_inds = np.where(gt_classes != 0)[0]
-                gt_boxes = np.empty((1, boxes.shape[0], 5), dtype=np.float32)
-                gt_boxes[0, :, 0:4] = boxes[gt_inds, :]
-                gt_boxes[0, :, 4] = gt_classes[gt_inds]
+                gt_boxes = np.empty((boxes.shape[0], 5), dtype=np.float32)
+                gt_boxes[:, 0:4] = boxes[gt_inds, :]
+                gt_boxes[:, 4] = gt_classes[gt_inds]
             else:
-                gt_boxes = np.empty((1, 0, 5), dtype=np.float32)
+                gt_boxes = np.empty((0, 5), dtype=np.float32)
             all_gt_boxes.append(gt_boxes)
 
-        label.append({'gt_boxes': all_gt_boxes})
+        label.append({'all_gt_boxes': all_gt_boxes})
 
     return data, label, im_info
 

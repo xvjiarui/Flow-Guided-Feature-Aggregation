@@ -56,6 +56,7 @@ config.dataset.test_image_set = 'VID_val_videos'
 config.dataset.root_path = './data'
 config.dataset.dataset_path = './data/ILSVRC2015'
 config.dataset.NUM_CLASSES = 31
+config.dataset.motion_iou_path = ''
 
 
 config.TRAIN = edict()

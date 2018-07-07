@@ -180,7 +180,37 @@ def iou_pred(boxes, box_deltas):
 
     return pred_boxes
 
-
+def translation_dist(src_boxes, dst_boxes):
+    """
+    determine distance between src_boxes and dst_boxes
+    :param boxes: n * 4 bounding boxes
+    :param query_boxes: k * 4 bounding boxes
+    :return: overlaps: n * k * 4 dist mat
+    """
+    n_ = src_boxes.shape[0]
+    k_ = dst_boxes.shape[0]
+    dim = 4
+    dist_mat = np.zeros((n_, k_, dim), dtype=np.float)
+    for k in range(k_):
+        dst_width = dst_boxes[k, 2] - dst_boxes[k, 0] + 1
+        dst_height = dst_boxes[k, 3] - dst_boxes[k, 1] + 1
+        dst_center_x = (dst_boxes[k, 2] + dst_boxes[k, 0]) * 0.5
+        dst_center_y = (dst_boxes[k, 3] + dst_boxes[k, 1]) * 0.5
+        for n in range(n_):
+            src_width = src_boxes[n, 2] - src_boxes[n, 0] + 1
+            src_height = src_boxes[n, 3] - src_boxes[n, 1] + 1
+            src_center_x = (src_boxes[n, 2] + src_boxes[n, 0]) * 0.5
+            src_center_y = (src_boxes[n, 3] + src_boxes[n, 1]) * 0.5
+            # dist_mat[n, k, 0] = (src_center_x - dst_center_x)/dst_width
+            # dist_mat[n, k, 1] = (src_center_y - dst_center_y)/dst_height
+            # dist_mat[n, k, 2] = np.log(src_width/dst_width)
+            # dist_mat[n, k, 3] = np.log(src_height/dst_height)
+            dist_mat[n, k, 0] = (dst_center_x - src_center_x)/src_width
+            dist_mat[n, k, 1] = (dst_center_y - src_center_y)/src_height
+            dist_mat[n, k, 2] = np.log(dst_width/src_width)
+            dist_mat[n, k, 3] = np.log(dst_height/src_height)
+    return dist_mat
+    
 # define bbox_transform and bbox_pred
 bbox_transform = nonlinear_transform
 bbox_pred = nonlinear_pred

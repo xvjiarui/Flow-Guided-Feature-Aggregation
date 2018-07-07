@@ -325,7 +325,7 @@ def pred_eval(gpu_id, predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, l
 
             if vis:
                 boxes_this_image = [[]] + [all_boxes[j][idx+delta] for j in range(1, imdb.num_classes)]
-                vis_all_detection(data_dict['data'].asnumpy(), boxes_this_image, imdb.classes, scales[delta], cfg)
+                vis_all_detection(data_dict['data'][0:1].asnumpy(), boxes_this_image, imdb.classes, scales[delta], cfg)
 
         idx += batch_size
         t3 = time.clock() - t
@@ -344,7 +344,7 @@ def pred_eval(gpu_id, predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, l
 
 
 
-def vis_all_detection(im_array, detections, class_names, scale, cfg, threshold=0.1):
+def vis_all_detection(im_array, detections, class_names, scale, cfg, threshold=1e-3):
     """
     visualize all detections in one image
     :param im_array: [b=1 c h w] in rgb
