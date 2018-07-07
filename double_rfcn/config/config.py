@@ -14,6 +14,7 @@
 import yaml
 import numpy as np
 from easydict import EasyDict as edict
+import os
 
 config = edict()
 
@@ -23,6 +24,7 @@ config.symbol = ''
 config.gpus = ''
 config.CLASS_AGNOSTIC = True
 config.SCALES = [(600, 1000)]  # first is scale (the shorter side); second is max size
+config.USE_PHILLY
 
 # default training
 config.default = edict()
