@@ -216,6 +216,7 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
 
 
 def main():
+    os.system('git rev-parse HEAD')
     print('Called with argument:', args)
     if args.usePhilly:
         config.gpus ='0,1,2,3,4,5,6,7'

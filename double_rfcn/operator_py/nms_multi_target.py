@@ -20,6 +20,7 @@ from bbox.bbox_transform import bbox_overlaps, translation_dist
 
 num_of_is_full_max = [0]
 score_rank_max = [0, 0]
+DEBUG=False
 class NmsMultiTargetOp(mx.operator.CustomOp):
     def __init__(self, target_thresh):
         super(NmsMultiTargetOp, self).__init__()
@@ -208,7 +209,8 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
                             top_k = max(1, top_k)
                             top_k = min(top_k, len(bbox_dist_mat.flatten()))
                             # top_k = 1
-                            print("{} of out {} stable pair".format(top_k, len(bbox_dist_mat.flatten())))
+                            if DEBUG:
+                                print("{} of out {} stable pair".format(top_k, len(bbox_dist_mat.flatten())))
                             ind_list, ref_ind_list = np.unravel_index(np.argsort(bbox_dist_mat, axis=None)[:top_k], bbox_dist_mat.shape)
                             score_sum_list = []
                             rank_sum_list = []
@@ -219,19 +221,21 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
                                 rank_sum_list.append(rank_sum)
                             score_max_idx = np.argmax(np.array(score_sum_list))
                             rank_max_idx = np.argmin(np.array(rank_sum_list))
-                            if score_max_idx == rank_max_idx:
-                                score_rank_max[0] += 1
-                            score_rank_max[1] += 1
+                            if DEBUG:
+                                if score_max_idx == rank_max_idx:
+                                    score_rank_max[0] += 1
+                                score_rank_max[1] += 1
                             # max_idx = rank_max_idx
                             max_idx = score_max_idx
                             ind = ind_list[max_idx]
                             ref_ind = ref_ind_list[max_idx]
-                            if ind == np.argmax(overlap_score_per_gt[valid_bbox_indices]):
-                                # num_of_is_full_max[0] += 1
-                                print('cur takes the max')
-                            if ref_ind == np.argmax(ref_overlap_score_per_gt[ref_valid_bbox_indices]):
-                                # num_of_is_full_max[0] += 1
-                                print('ref takes the max')
+                            if DEBUG:
+                                if ind == np.argmax(overlap_score_per_gt[valid_bbox_indices]):
+                                    num_of_is_full_max[0] += 1
+                                    print('cur takes the max')
+                                if ref_ind == np.argmax(ref_overlap_score_per_gt[ref_valid_bbox_indices]):
+                                    num_of_is_full_max[0] += 1
+                                    print('ref takes the max')
 
                             output[valid_bbox_indices[ind]] = 1
                             ref_output[ref_valid_bbox_indices[ref_ind]] = 1
@@ -249,7 +253,8 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
         num_of_is_full_max[0] = 0
         blob, ref_blob = get_target(bbox, gt_box, score, ref_bbox, ref_gt_box, ref_score)
         blob = np.concatenate((blob, ref_blob))
-        # print("score_rank:{}".format(1.0*score_rank_max[0]/score_rank_max[1]))
+        if DEBUG:
+            print("score_rank:{}".format(1.0*score_rank_max[0]/score_rank_max[1]))
         self.assign(out_data[0], req[0], blob)
 
     def backward(self, req, out_grad, in_data, out_data, in_grad, aux):

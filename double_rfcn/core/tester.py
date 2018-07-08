@@ -154,17 +154,57 @@ def im_detect(predictor, data_batch, data_names, scales, cfg):
         im_shape = data_dict['data'].shape
 
         # save output
-        scores = output['cls_prob_reshape_output'].asnumpy()[0]
-        bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[0]
-        # post processing
-        pred_boxes = bbox_pred(rois, bbox_deltas)
-        pred_boxes = clip_boxes(pred_boxes, im_shape[-2:])
+        if cfg.TEST.LEARN_NMS:
+            concat_pred_boxes = output['concat_sorted_bbox_output'].asnumpy()
+            # raw_scores = output['sorted_score_output'].asnumpy()
+            concat_nms_scores = output['nms_final_score_output'].asnumpy()
 
-        # we used scaled image & roi to train, so it is necessary to transform them back
-        pred_boxes = pred_boxes / scale
+            concat_pre_nms_scores = output['pre_nms_score_output'].asnumpy()
+            # we used scaled image & roi to train, so it is necessary to transform them back
+            concat_pred_boxes = concat_pred_boxes / scale
 
-        scores_all.append(scores)
-        pred_boxes_all.append(pred_boxes)
+            concat_multi_scores = np.dstack((concat_nms_scores, concat_pre_nms_scores))
+
+            # concat_nms_scores /= concat_pre_nms_scores
+            pred_boxes, ref_pred_boxes = np.split(concat_pred_boxes, 2)
+            scores, ref_scores = np.split(concat_multi_scores, 2)
+
+            pred_boxes_all.append(pred_boxes)
+            ref_pred_boxes_all.append(ref_pred_boxes)
+            scores_all.append(scores)
+            ref_scores_all.append(ref_scores)
+
+            nms_multi_target = output['custom0_nms_multi_target'].asnumpy()
+            target, ref_target = np.split(nms_multi_target, 2)
+            concat_target_boxes = concat_pred_boxes[np.where(nms_multi_target)[:2]]
+            concat_target_scores = concat_nms_scores[np.where(nms_multi_target)[:2]]
+            concat_pre_target_scores = concat_pre_nms_scores[np.where(nms_multi_target)[:2]]
+
+            # concat_target_boxes = concat_target_boxes / scale
+
+            # construct gt style nms_multi_target, 0:30 classes
+            concat_target_boxes = np.hstack((concat_target_boxes, np.where(nms_multi_target)[1][:, np.newaxis]))
+            concat_target_boxes = np.hstack((concat_target_boxes, concat_target_scores[:, np.newaxis]))
+            concat_target_boxes = np.hstack((concat_target_boxes, concat_pre_target_scores[:, np.newaxis]))
+
+            target_boxes, ref_target_boxes = np.split(concat_target_boxes, 2)
+
+            data_dict['nms_multi_target'] = target_boxes
+            data_dict['ref_nms_multi_target'] = ref_target_boxes
+
+        else:
+            # save output
+            scores = output['cls_prob_reshape_output'].asnumpy()[0]
+            bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[0]
+            # post processing
+            pred_boxes = bbox_pred(rois, bbox_deltas)
+            pred_boxes = clip_boxes(pred_boxes, im_shape[-2:])
+
+            # we used scaled image & roi to train, so it is necessary to transform them back
+            pred_boxes = pred_boxes / scale
+
+            scores_all.append(scores)
+            pred_boxes_all.append(pred_boxes)
 
     return scores_all, pred_boxes_all, data_dict_all
 
@@ -299,8 +339,8 @@ def pred_eval(gpu_id, predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, l
         for delta, (scores, boxes, data_dict) in enumerate(zip(scores_all, boxes_all, data_dict_all)):
             if cfg.TEST.LEARN_NMS:
                 for j in range(1, imdb.num_classes):
-                    indexes = np.where(scores[:, j-1] > thresh)[0]
-                    cls_scores = scores[indexes, j-1, np.newaxis]
+                    indexes = np.where(scores[:, j-1, 0] > thresh)[0]
+                    cls_scores = scores[indexes, j-1, 0]
                     cls_boxes = boxes[indexes, j-1, :]
                     cls_dets = np.hstack((cls_boxes, cls_scores))
 

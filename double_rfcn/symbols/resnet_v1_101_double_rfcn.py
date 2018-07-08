@@ -869,10 +869,7 @@ class resnet_v1_101_double_rfcn(Symbol):
         concat_bbox_pred = mx.sym.Pooling(name='ave_bbox_pred_rois', data=psroipooled_loc_rois, pool_type='avg',
                                    global_pool=True,
                                    kernel=(7, 7))
-        # cls_score = mx.sym.Reshape(name='cls_score_reshape', data=cls_score, shape=(-1, num_classes))
-        # bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=bbox_pred, shape=(-1, 4 * num_reg_classes))
-        # ref_cls_score = mx.sym.Reshape(name='cls_score_reshape', data=ref_cls_score, shape=(-1, num_classes))
-        # ref_bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=ref_bbox_pred, shape=(-1, 4 * num_reg_classes))
+        
         concat_cls_score = mx.sym.Reshape(name='cls_score_reshape', data=concat_cls_score, shape=(-1, num_classes))
         concat_bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=concat_bbox_pred, shape=(-1, 4 * num_reg_classes))
 

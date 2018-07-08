@@ -155,7 +155,7 @@ def im_double_detect(predictor, data_batch, data_names, scales, cfg):
             scores_all.append(scores)
             ref_scores_all.append(ref_scores)
 
-            nms_multi_target = output['custom0_nms_multi_target'].asnumpy()
+            nms_multi_target = output['stable_nms_multi_target'].asnumpy()
             target, ref_target = np.split(nms_multi_target, 2)
             concat_target_boxes = concat_pred_boxes[np.where(nms_multi_target)[:2]]
             concat_target_scores = concat_nms_scores[np.where(nms_multi_target)[:2]]
@@ -210,7 +210,7 @@ def bbox_equal_count(src_boxes, dst_boxes, epsilon=1e-5):
 
     return count
 
-DEBUG = False
+DEBUG = True
 def pred_double_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=True, show_gt=False):
     """
     wrapper for calculating offline validation for faster data analysis
@@ -495,17 +495,17 @@ def pred_double_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, lo
         if logger:
             logger.info('testing {}/{} data {:.4f}s net {:.4f}s post {:.4f}s'.format(idx, num_images, t1, t2, t3))
 
-    with open(det_file, 'wb') as f:
-        cPickle.dump(all_boxes, f, protocol=cPickle.HIGHEST_PROTOCOL)
+    # with open(det_file, 'wb') as f:
+    #     cPickle.dump(all_boxes, f, protocol=cPickle.HIGHEST_PROTOCOL)
 
     # np.save('class_lut.npy', class_lut)
 
-    info_str = imdb.evaluate_detections(all_boxes)
-    if logger:
-        logger.info('evaluate detections: \n{}'.format(info_str))
-        # num_valid_classes = [len(x) for x in class_lut]
-        logger.info('valid class ratio:{}'.format(np.sum(num_valid_classes)/float(num_images)))
-        logger.info('valid score ratio:{}'.format(float(valid_tally)/float(valid_sum+0.01)))
+    # info_str = imdb.evaluate_detections(all_boxes)
+    # if logger:
+    #     logger.info('evaluate detections: \n{}'.format(info_str))
+    #     # num_valid_classes = [len(x) for x in class_lut]
+    #     logger.info('valid class ratio:{}'.format(np.sum(num_valid_classes)/float(num_images)))
+    #     logger.info('valid score ratio:{}'.format(float(valid_tally)/float(valid_sum+0.01)))
 
 def vis_double_all_detection(im_array, detections, ref_im_array, ref_detections, class_names, scale, cfg, threshold=1e-4):
     """

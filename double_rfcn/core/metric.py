@@ -44,6 +44,7 @@ class RPNAccMetric(mx.metric.EvalMetric):
 
         # pred (b, c, p) or (b, c, h, w)
         pred_label = mx.ndarray.argmax_channel(pred).asnumpy().astype('int32')
+        # modified for double 
         pred_label = pred_label.reshape((2, -1))
         # label (b, p)
         label = label.asnumpy().astype('int32')
