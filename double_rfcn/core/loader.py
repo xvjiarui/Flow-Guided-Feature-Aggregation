@@ -126,7 +126,7 @@ class VisTestLoader(mx.io.DataIter):
             self.data_dict = data
             self.im_info = im_info
             empty_gt = False
-            if label[0]['all_gt_boxes'][0].shape[0] == 0:
+            if label[0]['all_gt_boxes'][0].shape[0] == 0 or label[0]['all_gt_boxes'][1].shape[0] == 0:
                 empty_gt = True
                 print("empty frame")
 

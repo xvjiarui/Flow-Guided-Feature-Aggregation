@@ -216,6 +216,7 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
 
 
 def main():
+    print("Pulled from current commit:")
     os.system('git rev-parse HEAD')
     print('Called with argument:', args)
     if args.usePhilly:
