@@ -71,44 +71,20 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
 
                 # [num_valid_gt, 5]
                 valid_gt_box = gt_box[0, valid_gt_mask, :]
-                num_valid_gt = len(valid_gt_box)
 
-                if num_valid_gt == 0:
-                    output_list.append([])
-                else:
-                    bbox_per_class = bbox[:, cls_idx, :]
-                    # score_per_class, [first_n, 1]
-                    score_per_class = score[:, cls_idx:cls_idx+1]
-                    # [first_n, num_valid_gt]
-                    overlap_mat = bbox_overlaps(bbox_per_class.astype(np.float),
-                                                valid_gt_box[:,:-1].astype(np.float))
+                # bbox_per_class, [first_n, 4]
+                bbox_per_class = bbox[:, cls_idx, :]
+                # score_per_class, [first_n, 1]
+                score_per_class = score[:, cls_idx:cls_idx+1]
+                output_list.append(get_scores_per_class(bbox_per_class, valid_gt_box, score_per_class))
 
-                    eye_matrix = np.eye(num_valid_gt)
-                    output_list_per_class = []
-
-                    for thresh in self._target_thresh:
-                        # following mAP metric
-                        overlap_mask = (overlap_mat > thresh)
-                        valid_bbox_indices = np.where(overlap_mask)[0]
-                        # require score be 2-dim
-                        # [first_n, num_valid_gt]
-                        overlap_score = np.tile(score_per_class, (1, num_valid_gt))
-                        overlap_score *= overlap_mask
-                        max_overlap_indices = np.argmax(overlap_mat, axis=1)
-                        # [first_n, num_valid_gt]
-                        max_overlap_mask = eye_matrix[max_overlap_indices]
-                        overlap_score *= max_overlap_mask
-
-                        output_list_per_class.append(overlap_score)
-                    output_list.append(output_list_per_class)
 
             return output_list
 
         def get_scores_per_class(bbox_per_class, gt_box_per_class, score_per_class):
-            pass
-            # bbox [FIRST_N, 4]
-            # gt_box [, 4]
-            # score [FIRST_N]
+            # bbox [first_n, 4]
+            # gt_box [num_valid_gt, 4]
+            # score [first_n]
             num_valid_gt = len(gt_box_per_class)
             output_list_per_class = []
             if  num_valid_gt== 0:
@@ -232,7 +208,7 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
                             top_k = max(1, top_k)
                             top_k = min(top_k, len(bbox_dist_mat.flatten()))
                             # top_k = 1
-                            # print("{} of out {} stable pair".format(top_k, len(bbox_dist_mat.flatten())))
+                            print("{} of out {} stable pair".format(top_k, len(bbox_dist_mat.flatten())))
                             ind_list, ref_ind_list = np.unravel_index(np.argsort(bbox_dist_mat, axis=None)[:top_k], bbox_dist_mat.shape)
                             score_sum_list = []
                             rank_sum_list = []
@@ -250,12 +226,12 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
                             max_idx = score_max_idx
                             ind = ind_list[max_idx]
                             ref_ind = ref_ind_list[max_idx]
-                            # if ind == np.argmax(overlap_score_per_gt[valid_bbox_indices]):
-                            #     # num_of_is_full_max[0] += 1
-                            #     print('cur takes the max')
-                            # if ref_ind == np.argmax(ref_overlap_score_per_gt[ref_valid_bbox_indices]):
-                            #     # num_of_is_full_max[0] += 1
-                            #     print('ref takes the max')
+                            if ind == np.argmax(overlap_score_per_gt[valid_bbox_indices]):
+                                # num_of_is_full_max[0] += 1
+                                print('cur takes the max')
+                            if ref_ind == np.argmax(ref_overlap_score_per_gt[ref_valid_bbox_indices]):
+                                # num_of_is_full_max[0] += 1
+                                print('ref takes the max')
 
                             output[valid_bbox_indices[ind]] = 1
                             ref_output[ref_valid_bbox_indices[ref_ind]] = 1
