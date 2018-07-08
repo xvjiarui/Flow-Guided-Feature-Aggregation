@@ -776,10 +776,10 @@ class resnet_v1_101_double_rfcn(Symbol):
 
         # prepare rpn data
         concat_rpn_cls_score_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_score, shape=(-1, 2, 0, 0), name="rpn_cls_score_reshape")
+            data=concat_rpn_cls_score, shape=(0, 2, -1, 0), name="rpn_cls_score_reshape")
     
         # classification
-        concat_rpn_cls_prob = mx.sym.SoftmaxOutput(data=concat_rpn_cls_score_reshape, label=mx.sym.Reshape(concat_rpn_label, shape=(2*num_anchors, -1)), multi_output=True,
+        concat_rpn_cls_prob = mx.sym.SoftmaxOutput(data=concat_rpn_cls_score_reshape, label=concat_rpn_label, multi_output=True,
                                                normalization='valid', use_ignore=True, ignore_label=-1, name="rpn_cls_prob")
         # bounding box regression
         if cfg.network.NORMALIZE_RPN:
@@ -795,7 +795,7 @@ class resnet_v1_101_double_rfcn(Symbol):
         concat_rpn_cls_act = mx.sym.SoftmaxActivation(
             data=concat_rpn_cls_score_reshape, mode="channel", name="rpn_cls_act")
         concat_rpn_cls_act_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_act, shape=(-1, 2 * num_anchors, 0, 0), name='rpn_cls_act_reshape')
+            data=concat_rpn_cls_act, shape=(0, 2 * num_anchors, -1, 0), name='rpn_cls_act_reshape')
 
         rpn_cls_act_reshape, ref_rpn_cls_act_reshape = mx.sym.split(concat_rpn_cls_act_reshape, axis=0, num_outputs=2)
         rpn_bbox_pred, ref_rpn_bbox_pred = mx.sym.split(concat_rpn_bbox_pred, axis=0, num_outputs=2)
@@ -949,15 +949,14 @@ class resnet_v1_101_double_rfcn(Symbol):
                 bbox_mean=cfg.network.ANCHOR_MEANS, bbox_std=cfg.network.ANCHOR_STDS)
 
         # prepare rpn data
-        # the order of reshape matters when batch size > 1
         concat_rpn_cls_score_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_score, shape=(-1, 2, 0, 0), name="rpn_cls_score_reshape")
+            data=concat_rpn_cls_score, shape=(0, 2, -1, 0), name="rpn_cls_score_reshape")
     
         # ROI proposal
         concat_rpn_cls_act = mx.sym.SoftmaxActivation(
             data=concat_rpn_cls_score_reshape, mode="channel", name="rpn_cls_act")
         concat_rpn_cls_act_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_act, shape=(-1, 2 * num_anchors, 0, 0), name='rpn_cls_act_reshape')
+            data=concat_rpn_cls_act, shape=(0, 2 * num_anchors, -1, 0), name='rpn_cls_act_reshape')
 
         rpn_cls_act_reshape, ref_rpn_cls_act_reshape = mx.sym.split(concat_rpn_cls_act_reshape, axis=0, num_outputs=2)
         rpn_bbox_pred, ref_rpn_bbox_pred = mx.sym.split(concat_rpn_bbox_pred, axis=0, num_outputs=2)
@@ -1011,9 +1010,8 @@ class resnet_v1_101_double_rfcn(Symbol):
                                    global_pool=True,
                                    kernel=(7, 7))
 
-        concat_cls_score = mx.sym.Reshape(name='cls_score_reshape', data=concat_cls_score, shape=(-1, num_classes))
-        concat_cls_prob = mx.sym.softmax(name='cls_prob', data=concat_cls_score)
-        concat_cls_prob = mx.sym.Reshape(name='cls_prob_reshape', data=concat_cls_prob, shape=(2*cfg.TEST.BATCH_IMAGES, -1, num_classes))
+        concat_cls_score = mx.sym.Reshape(name='cls_score_reshape', data=concat_cls_score, shape=(2*cfg.TEST.BATCH_IMAGES, -1, num_classes))
+        concat_cls_prob = mx.sym.softmax(name='cls_prob_reshape', data=concat_cls_score)
         concat_bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=concat_bbox_pred, shape=(2*cfg.TEST.BATCH_IMAGES, -1, 4 * num_reg_classes))
 
         group = mx.sym.Group([concat_rois, concat_cls_prob, concat_bbox_pred])

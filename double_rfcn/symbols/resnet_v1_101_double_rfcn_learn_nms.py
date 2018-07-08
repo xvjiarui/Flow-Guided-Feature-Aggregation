@@ -276,10 +276,10 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
 
         # prepare rpn data
         concat_rpn_cls_score_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_score, shape=(-1, 2, 0, 0), name="rpn_cls_score_reshape")
+            data=concat_rpn_cls_score, shape=(0, 2, -1, 0), name="rpn_cls_score_reshape")
     
         # classification
-        concat_rpn_cls_prob = mx.sym.SoftmaxOutput(data=concat_rpn_cls_score_reshape, label=mx.sym.Reshape(concat_rpn_label, shape=(2*num_anchors, -1)), multi_output=True,
+        concat_rpn_cls_prob = mx.sym.SoftmaxOutput(data=concat_rpn_cls_score_reshape, label=concat_rpn_label, multi_output=True,
                                                normalization='valid', use_ignore=True, ignore_label=-1, name="rpn_cls_prob")
         # bounding box regression
         if cfg.network.NORMALIZE_RPN:
@@ -295,7 +295,7 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         concat_rpn_cls_act = mx.sym.softmax(
             data=concat_rpn_cls_score_reshape, axis=1, name="rpn_cls_act")
         concat_rpn_cls_act_reshape = mx.sym.Reshape(
-            data=concat_rpn_cls_act, shape=(-1, 2 * num_anchors, 0, 0), name='rpn_cls_act_reshape')
+            data=concat_rpn_cls_act, shape=(0, 2 * num_anchors, -1, 0), name='rpn_cls_act_reshape')
 
         rpn_cls_act_reshape, ref_rpn_cls_act_reshape = mx.sym.split(concat_rpn_cls_act_reshape, axis=0, num_outputs=2)
         rpn_bbox_pred, ref_rpn_bbox_pred = mx.sym.split(concat_rpn_bbox_pred, axis=0, num_outputs=2)
@@ -520,6 +520,11 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         concat_rpn_cls_score_reshape = mx.sym.Reshape(
             data=concat_rpn_cls_score, shape=(0, 2, -1, 0), name="rpn_cls_score_reshape")
     
+        if cfg.network.NORMALIZE_RPN:
+            concat_rpn_bbox_pred = mx.sym.Custom(
+                bbox_pred=concat_rpn_bbox_pred, op_type='rpn_inv_normalize', num_anchors=num_anchors,
+                bbox_mean=cfg.network.ANCHOR_MEANS, bbox_std=cfg.network.ANCHOR_STDS)
+            
         # ROI proposal
         concat_rpn_cls_act = mx.sym.softmax(
             data=concat_rpn_cls_score_reshape, axis=1, name="rpn_cls_act")
