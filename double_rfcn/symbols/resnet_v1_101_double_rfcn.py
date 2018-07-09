@@ -869,7 +869,7 @@ class resnet_v1_101_double_rfcn(Symbol):
         concat_bbox_pred = mx.sym.Pooling(name='ave_bbox_pred_rois', data=psroipooled_loc_rois, pool_type='avg',
                                    global_pool=True,
                                    kernel=(7, 7))
-        
+
         concat_cls_score = mx.sym.Reshape(name='cls_score_reshape', data=concat_cls_score, shape=(-1, num_classes))
         concat_bbox_pred = mx.sym.Reshape(name='bbox_pred_reshape', data=concat_bbox_pred, shape=(-1, 4 * num_reg_classes))
 
@@ -958,35 +958,42 @@ class resnet_v1_101_double_rfcn(Symbol):
         rpn_cls_act_reshape, ref_rpn_cls_act_reshape = mx.sym.split(concat_rpn_cls_act_reshape, axis=0, num_outputs=2)
         rpn_bbox_pred, ref_rpn_bbox_pred = mx.sym.split(concat_rpn_bbox_pred, axis=0, num_outputs=2)
 
+        # if cfg.TEST.CXX_PROPOSAL:
+        #     rois = mx.contrib.sym.Proposal(
+        #         cls_prob=rpn_cls_act_reshape, bbox_pred=rpn_bbox_pred, im_info=im_info, name='rois',
+        #         feature_stride=cfg.network.RPN_FEAT_STRIDE, scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
+        #         rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
+        #         threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
+
+        #     ref_rois = mx.contrib.sym.Proposal(
+        #         cls_prob=ref_rpn_cls_act_reshape, bbox_pred=ref_rpn_bbox_pred, im_info=im_info, name='ref_rois',
+        #         feature_stride=cfg.network.RPN_FEAT_STRIDE, scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
+        #         rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
+        #         threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
+        # else:
+        #     rois = mx.sym.Custom(
+        #         cls_prob=rpn_cls_act_reshape, bbox_pred=rpn_bbox_pred, im_info=im_info, name='rois',
+        #         op_type='proposal', feat_stride=cfg.network.RPN_FEAT_STRIDE,
+        #         scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
+        #         rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
+        #         threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
+
+        #     ref_rois = mx.sym.Custom(
+        #         cls_prob=ref_rpn_cls_act_reshape, bbox_pred=ref_rpn_bbox_pred, im_info=im_info, name='ref_rois',
+        #         op_type='proposal', feat_stride=cfg.network.RPN_FEAT_STRIDE,
+        #         scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
+        #         rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
+        #         threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
+
         if cfg.TEST.CXX_PROPOSAL:
-            rois = mx.contrib.sym.Proposal(
-                cls_prob=rpn_cls_act_reshape, bbox_pred=rpn_bbox_pred, im_info=im_info, name='rois',
+            concat_rois = mx.contrib.sym.MultiProposal(
+                cls_prob=concat_rpn_cls_act_reshape, bbox_pred=concat_rpn_bbox_pred, im_info=mx.sym.tile(im_info, reps=(2, 1)), name='concat_rois',
                 feature_stride=cfg.network.RPN_FEAT_STRIDE, scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
                 rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
                 threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
 
-            ref_rois = mx.contrib.sym.Proposal(
-                cls_prob=ref_rpn_cls_act_reshape, bbox_pred=ref_rpn_bbox_pred, im_info=im_info, name='ref_rois',
-                feature_stride=cfg.network.RPN_FEAT_STRIDE, scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
-                rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
-                threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
-        else:
-            rois = mx.sym.Custom(
-                cls_prob=rpn_cls_act_reshape, bbox_pred=rpn_bbox_pred, im_info=im_info, name='rois',
-                op_type='proposal', feat_stride=cfg.network.RPN_FEAT_STRIDE,
-                scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
-                rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
-                threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
-
-            ref_rois = mx.sym.Custom(
-                cls_prob=ref_rpn_cls_act_reshape, bbox_pred=ref_rpn_bbox_pred, im_info=im_info, name='ref_rois',
-                op_type='proposal', feat_stride=cfg.network.RPN_FEAT_STRIDE,
-                scales=tuple(cfg.network.ANCHOR_SCALES), ratios=tuple(cfg.network.ANCHOR_RATIOS),
-                rpn_pre_nms_top_n=cfg.TEST.RPN_PRE_NMS_TOP_N, rpn_post_nms_top_n=cfg.TEST.RPN_POST_NMS_TOP_N,
-                threshold=cfg.TEST.RPN_NMS_THRESH, rpn_min_size=cfg.TEST.RPN_MIN_SIZE)
-
-        ref_rois = mx.sym.concat(mx.sym.ones((cfg.TRAIN.RPN_POST_NMS_TOP_N, 1)), mx.sym.slice(ref_rois, begin=(None, 1), end=(None, None)), dim=1)
-        concat_rois = mx.sym.concat(rois, ref_rois, dim=0, name='concat_rois')
+        # ref_rois = mx.sym.concat(mx.sym.ones((cfg.TRAIN.RPN_POST_NMS_TOP_N, 1)), mx.sym.slice(ref_rois, begin=(None, 1), end=(None, None)), dim=1)
+        # concat_rois = mx.sym.concat(rois, ref_rois, dim=0, name='concat_rois')
 
         concat_rfcn_feat = conv_feats[1]
         concat_rfcn_cls = mx.sym.Convolution(data=concat_rfcn_feat, kernel=(1, 1), num_filter=7 * 7 * num_classes, name="rfcn_cls")
