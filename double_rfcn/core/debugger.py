@@ -42,7 +42,7 @@ class Predictor(object):
         # [dict(zip(self._mod.output_names, _)) for _ in zip(*self._mod.get_outputs(merge_multi_context=False))]
         return [dict(zip(self._mod.output_names, _)) for _ in zip(*self._mod.get_outputs(merge_multi_context=False))]
 
-def im_double_detect_(predictor, data_batch, data_names, scales, cfg):
+def im_double_detect(predictor, data_batch, data_names, scales, cfg):
     output_all = predictor.predict(data_batch)
 
     data_dict_all = [dict(zip(data_names, idata)) for idata in data_batch.data]
@@ -78,89 +78,12 @@ def im_double_detect_(predictor, data_batch, data_names, scales, cfg):
             scores_all.append(scores)
             ref_scores_all.append(ref_scores)
 
-            nms_multi_target = output['custom0_nms_multi_target'].asnumpy()
-            target, ref_target = np.split(nms_multi_target, 2)
-            concat_target_boxes = concat_pred_boxes[np.where(nms_multi_target)[:2]]
-            concat_target_scores = concat_nms_scores[np.where(nms_multi_target)[:2]]
-            concat_pre_target_scores = concat_pre_nms_scores[np.where(nms_multi_target)[:2]]
-
-            # concat_target_boxes = concat_target_boxes / scale
-
-            # construct gt style nms_multi_target, 0:30 classes
-            concat_target_boxes = np.hstack((concat_target_boxes, np.where(nms_multi_target)[1][:, np.newaxis]))
-            concat_target_boxes = np.hstack((concat_target_boxes, concat_target_scores[:, np.newaxis]))
-            concat_target_boxes = np.hstack((concat_target_boxes, concat_pre_target_scores[:, np.newaxis]))
-
-            target_boxes, ref_target_boxes = np.split(concat_target_boxes, 2)
-
-            data_dict['nms_multi_target'] = target_boxes
-            data_dict['ref_nms_multi_target'] = ref_target_boxes
-
-        else:
-            rois, ref_rois = np.split(concat_rois, 2)
-            scores = output['cls_prob_reshape_output'].asnumpy()[0]
-            bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[0]
-            ref_scores = output['cls_prob_reshape_output'].asnumpy()[1]
-            ref_bbox_deltas = output['bbox_pred_reshape_output'].asnumpy()[1]
-
-            # post processing
-            pred_boxes = bbox_pred(rois, bbox_deltas)
-            pred_boxes = clip_boxes(pred_boxes, im_shape[-2:])
-            pred_boxes /= scale
-
-            ref_pred_boxes = bbox_pred(ref_rois, ref_bbox_deltas)
-            ref_pred_boxes = clip_boxes(ref_pred_boxes, im_shape[-2:])
-            ref_pred_boxes /= scale
-
-            pred_boxes_all.append(pred_boxes)
-            scores_all.append(scores)
-            ref_pred_boxes_all.append(ref_pred_boxes)
-            ref_scores_all.append(ref_scores)
-
-    return scores_all, pred_boxes_all, ref_scores_all, ref_pred_boxes_all, data_dict_all
-
-def im_double_detect(predictor, data_batch, data_names, scales, cfg):
-    output_all = predictor.predict(data_batch)
-
-    data_dict_all = [dict(zip(data_names, idata)) for idata in data_batch.data]
-    scores_all = []
-    pred_boxes_all = []
-    ref_scores_all = []
-    ref_pred_boxes_all = []
-    for output, data_dict, scale in zip(output_all, data_dict_all, scales):
-        if cfg.TEST.HAS_RPN or cfg.network.ROIDispatch:
-            concat_rois = output['concat_rois_output'].asnumpy()[:, 1:]
-        else:
-            rois = data_dict['rois'].asnumpy().reshape((-1, 5))[:, 1:]
-        im_shape = data_dict['data'].shape
-
-        # save output
-        if cfg.TEST.LEARN_NMS:
-            concat_pred_boxes = output['concat_sorted_bbox_output'].asnumpy()
-            # raw_scores = output['sorted_score_output'].asnumpy()
-            concat_nms_scores = output['nms_final_score_output'].asnumpy()
-            # we used scaled image & roi to train, so it is necessary to transform them back
-            concat_pred_boxes = concat_pred_boxes / scale
-
-            concat_pre_nms_scores = concat_nms_scores
-
-            concat_multi_scores = np.dstack((concat_nms_scores, concat_pre_nms_scores))
-
-            # concat_nms_scores /= concat_pre_nms_scores
-            pred_boxes, ref_pred_boxes = np.split(concat_pred_boxes, 2)
-            scores, ref_scores = np.split(concat_multi_scores, 2)
-
-            pred_boxes_all.append(pred_boxes)
-            ref_pred_boxes_all.append(ref_pred_boxes)
-            scores_all.append(scores)
-            ref_scores_all.append(ref_scores)
-
             nms_multi_target = output['stable_nms_multi_target'].asnumpy()
             target, ref_target = np.split(nms_multi_target, 2)
             concat_target_boxes = concat_pred_boxes[np.where(nms_multi_target)[:2]]
             concat_target_scores = concat_nms_scores[np.where(nms_multi_target)[:2]]
             concat_pre_target_scores = concat_pre_nms_scores[np.where(nms_multi_target)[:2]]
-            
+
             # concat_target_boxes = concat_target_boxes / scale
 
             # construct gt style nms_multi_target, 0:30 classes
@@ -172,6 +95,25 @@ def im_double_detect(predictor, data_batch, data_names, scales, cfg):
 
             data_dict['nms_multi_target'] = target_boxes
             data_dict['ref_nms_multi_target'] = ref_target_boxes
+
+            concat_nms_feats = output['concat_nms_embedding_feat_output'].asnumpy()
+            concat_target_feats = concat_nms_feats[np.where(nms_multi_target)[:2]]
+            nms_feats, ref_nms_feats = np.split(concat_nms_feats, 2)
+            target_nms_feats, ref_target_nms_feats = np.split(concat_target_feats, 2)
+            high_score_feats = nms_feats[np.where(scores[:, :, 0] > 0.2)[:2]]
+            ref_high_score_feats = ref_nms_feats[np.where(ref_scores[:, :, 0] > 0.2)[:2]]
+            from scipy.spatial.distance import cosine
+            dist_mat = np.zeros((target_nms_feats.shape[0], high_score_feats.shape[0]), dtype=np.float)
+            ref_dist_mat = np.zeros((ref_target_nms_feats.shape[0], ref_high_score_feats.shape[0]), dtype=np.float)
+            for i, nms_feat in enumerate(target_nms_feats):
+                for j, high_score_feat in enumerate(high_score_feats):
+                    dist_mat[i, j] = cosine(nms_feat, high_score_feat)
+            for i, nms_feat in enumerate(ref_target_nms_feats):
+                for j, high_score_feat in enumerate(ref_high_score_feats):
+                    ref_dist_mat[i, j] = cosine(nms_feat, high_score_feat)
+            pdb.set_trace()
+            print(dist_mat)
+            print(ref_dist_mat)
 
         else:
             rois, ref_rois = np.split(concat_rois, 2)
@@ -195,6 +137,7 @@ def im_double_detect(predictor, data_batch, data_names, scales, cfg):
             ref_scores_all.append(ref_scores)
 
     return scores_all, pred_boxes_all, ref_scores_all, ref_pred_boxes_all, data_dict_all
+
 def bbox_equal_count(src_boxes, dst_boxes, epsilon=1e-5):
     def bbox_equal(src_box, dst_box):
         ret = True
@@ -210,7 +153,7 @@ def bbox_equal_count(src_boxes, dst_boxes, epsilon=1e-5):
 
     return count
 
-DEBUG = True
+DEBUG = False
 def pred_double_eval(predictor, test_data, imdb, cfg, vis=False, thresh=1e-3, logger=None, ignore_cache=True, show_gt=False):
     """
     wrapper for calculating offline validation for faster data analysis

@@ -20,7 +20,7 @@ from bbox.bbox_transform import bbox_overlaps, translation_dist
 
 num_of_is_full_max = [0]
 score_rank_max = [0, 0]
-DEBUG=False
+DEBUG=True
 class NmsMultiTargetOp(mx.operator.CustomOp):
     def __init__(self, target_thresh):
         super(NmsMultiTargetOp, self).__init__()
@@ -208,7 +208,7 @@ class NmsMultiTargetOp(mx.operator.CustomOp):
                             top_k = int(0.1 * len(bbox_dist_mat.flatten()) + 0.5)
                             top_k = max(1, top_k)
                             top_k = min(top_k, len(bbox_dist_mat.flatten()))
-                            # top_k = 1
+                            top_k = 1
                             if DEBUG:
                                 print("{} of out {} stable pair".format(top_k, len(bbox_dist_mat.flatten())))
                             ind_list, ref_ind_list = np.unravel_index(np.argsort(bbox_dist_mat, axis=None)[:top_k], bbox_dist_mat.shape)

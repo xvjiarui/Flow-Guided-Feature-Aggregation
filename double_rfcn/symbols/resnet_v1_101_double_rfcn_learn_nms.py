@@ -797,36 +797,83 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         cls_score, ref_cls_score = mx.sym.split(concat_cls_score, axis=0, num_outputs=2)
         bbox_pred, ref_bbox_pred = mx.sym.split(concat_bbox_pred, axis=0, num_outputs=2)
 
+        # get ROI feat
+        conv_new_1 = mx.sym.Convolution(data=concat_rfcn_feat, kernel=(1, 1), num_filter=256, name="conv_new_1")
+        conv_new_1_relu = mx.sym.Activation(data=conv_new_1, act_type='relu', name='conv_new_1_relu')
+
+        concat_roi_pool = mx.symbol.ROIPooling(
+            name='roi_pool', data=conv_new_1_relu, rois=concat_rois, pooled_size=(7, 7), spatial_scale=0.0625)
+
+        # 2 fc
+        concat_fc_new_1 = mx.symbol.FullyConnected(name='fc_new_1', data=concat_roi_pool, num_hidden=1024)
+        concat_fc_new_1_relu = mx.sym.Activation(data=concat_fc_new_1, act_type='relu', name='fc_new_1_relu')
+
+        concat_fc_new_2 = mx.symbol.FullyConnected(name='fc_new_2', data=concat_fc_new_1_relu, num_hidden=1024)
+        concat_fc_new_2_relu = mx.sym.Activation(data=concat_fc_new_2, act_type='relu', name='fc_new_2_relu')
+
+        # learning nms
+        fc_all_2_relu, ref_fc_all_2_relu = mx.sym.split(concat_fc_new_2_relu, axis=0, num_outputs=2)
+        sorted_bbox, sorted_score, nms_embedding_feat = self.get_sorted_bbox_symbol(cfg, rois, cls_score, bbox_pred, im_info, fc_all_2_relu, 1)
+        ref_sorted_bbox, ref_sorted_score, ref_nms_embedding_feat = self.get_sorted_bbox_symbol(cfg, ref_rois, ref_cls_score, ref_bbox_pred, im_info, ref_fc_all_2_relu, 2)
+
+        first_n = cfg.TRAIN.FIRST_N
         nms_target_thresh = np.fromstring(cfg.network.NMS_TARGET_THRESH, dtype=float, sep=',')
         num_thresh = len(nms_target_thresh)
         nms_eps = 1e-8
-        first_n = cfg.TRAIN.FIRST_N
         num_fg_classes = num_classes - 1
         bbox_means = cfg.TRAIN.BBOX_MEANS
         bbox_stds = cfg.TRAIN.BBOX_STDS 
         nongt_dim = cfg.TRAIN.RPN_POST_NMS_TOP_N
-        sorted_bbox, sorted_score = self.get_sorted_bbox_symbol(cfg, rois, cls_score, bbox_pred, im_info)
-        ref_sorted_bbox, ref_sorted_score = self.get_sorted_bbox_symbol(cfg, ref_rois, ref_cls_score, ref_bbox_pred, im_info)
 
+        # nms_rank_embedding, [first_n, 1024]
+        nms_rank_embedding = NMS_UTILS.extract_rank_embedding(first_n, 1024)
+        ref_nms_rank_embedding = NMS_UTILS.extract_rank_embedding(first_n, 1024)
+
+        concat_sorted_bbox = mx.sym.concat(sorted_bbox, ref_sorted_bbox, dim=0, name='concat_sorted_bbox')
+        concat_sorted_score = mx.sym.concat(sorted_score, ref_sorted_score, dim=0, name='concat_sorted_score')
+
+        concat_nms_embedding_feat = mx.sym.concat(nms_embedding_feat, ref_nms_embedding_feat, dim=0, name='concat_nms_embedding_feat')
+
+        concat_nms_position_matrix = NMS_UTILS.extract_multi_position_matrix(concat_sorted_bbox)
+
+
+        # 2*first_n hacking here
         first_n *= 2
 
-        concat_sorted_score = mx.sym.concat(sorted_score, ref_sorted_score, dim=0, name='concat_sorted_score')
-        concat_sorted_bbox = mx.sym.concat(sorted_bbox, ref_sorted_bbox, dim=0, name='concat_sorted_bbox')
-
+        # nms_attention_1, [first_n, num_fg_classes, 1024]
+        concat_nms_attention_1, concat_nms_softmax_1 = self.attention_module_nms_multi_head(
+            concat_nms_embedding_feat, concat_nms_position_matrix,
+            num_rois=first_n, index=1, group=16,
+            dim=(1024, 1024, 128), fc_dim=(64, 16), feat_dim=128)
+        concat_nms_all_feat_1 = concat_nms_embedding_feat + concat_nms_attention_1
+        concat_nms_all_feat_1_relu = mx.sym.Activation(data=concat_nms_all_feat_1, act_type='relu', name='nms_all_feat_1_relu')
+        # [first_n * num_fg_classes, 1024]
+        concat_nms_all_feat_1_relu_reshape = mx.sym.Reshape(concat_nms_all_feat_1_relu, shape=(-3, -2))
+        # logit, [first_n * num_fg_classes, num_thresh]
+        concat_nms_conditional_logit = mx.sym.FullyConnected(name='nms_logit',
+                                                  data=concat_nms_all_feat_1_relu_reshape,
+                                                  num_hidden=num_thresh)
+        # logit_reshape, [first_n, num_fg_classes, num_thresh]
+        concat_nms_conditional_logit_reshape = mx.sym.Reshape(concat_nms_conditional_logit,
+                                                   shape=(first_n, num_fg_classes, num_thresh))
+        concat_nms_conditional_score = mx.sym.Activation(data=concat_nms_conditional_logit_reshape,
+                                              act_type='sigmoid', name='nms_conditional_score')
         concat_sorted_score_reshape = mx.sym.expand_dims(concat_sorted_score, axis=2)
-        concat_nms_multi_score = concat_sorted_score_reshape
+        # sorted_score_reshape = mx.sym.BlockGrad(sorted_score_reshape)
+        concat_nms_multi_score = mx.sym.broadcast_mul(lhs=concat_sorted_score_reshape, rhs=concat_nms_conditional_score)
 
         nms_multi_target = mx.sym.Custom(bbox=sorted_bbox, gt_bbox=gt_boxes, 
                                          score=sorted_score,
                                          ref_bbox=ref_sorted_bbox, ref_gt_bbox = ref_gt_boxes, 
                                          ref_score = ref_sorted_score,
-                                         op_type='nms_multi_target', target_thresh=nms_target_thresh,
-                                         name='stable')
-        ##########################  additional output!  ##########################
+                                         op_type='nms_multi_target', target_thresh=nms_target_thresh, name='stable')
+
         if cfg.TEST.MERGE_METHOD == -1:
             nms_final_score = mx.sym.mean(data=concat_nms_multi_score, axis=2, name='nms_final_score')
+            pre_nms_score = mx.sym.mean(data=concat_sorted_score_reshape, axis=2, name='pre_nms_score')
         elif cfg.TEST.MERGE_METHOD == -2:
             nms_final_score = mx.sym.max(data=concat_nms_multi_score, axis=2, name='nms_final_score')
+            pre_nms_score = mx.sym.max(data=concat_sorted_score_reshape, axis=2, name='pre_nms_score')
         elif 0 <= cfg.TEST.MERGE_METHOD < num_thresh:
             idx = cfg.TEST.MERGE_METHOD
             nms_final_score = mx.sym.slice_axis(data=concat_nms_multi_score, axis=2, begin=idx, end=idx + 1)
@@ -838,7 +885,8 @@ class resnet_v1_101_double_rfcn_learn_nms(resnet_v1_101_double_rfcn):
         output_sym_list.append(concat_sorted_score)
         output_sym_list.append(nms_final_score)
         output_sym_list.append(nms_multi_target)
-        # output_sym_list.append(pre_nms_score)
+        output_sym_list.append(pre_nms_score)
+        output_sym_list.append(concat_nms_embedding_feat)
 
         self.sym = mx.sym.Group(output_sym_list)
         return self.sym

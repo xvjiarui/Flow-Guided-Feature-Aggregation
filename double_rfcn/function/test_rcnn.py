@@ -45,7 +45,7 @@ def get_predictor(sym, sym_instance, cfg, arg_params, aux_params, test_data, ctx
 
 def test_rcnn(cfg, dataset, image_set, root_path, dataset_path, motion_iou_path,
               ctx, prefix, epoch,
-              vis, ignore_cache, shuffle, has_rpn, proposal, thresh, logger=None, output_path=None):
+              vis, ignore_cache, shuffle, has_rpn, proposal, thresh, logger=None, output_path=None, enable_detailed_eval=False, use_philly=False):
     if not logger:
         assert False, 'require a logger'
 
@@ -56,7 +56,8 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path, motion_iou_path,
     # load symbol and testing data
     sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
     sym = sym_instance.get_test_symbol(cfg)
-    imdb = eval(dataset)(image_set, root_path, dataset_path, motion_iou_path, result_path=output_path)
+    imdb = eval(dataset)(image_set, root_path, dataset_path, motion_iou_path, result_path=output_path, 
+        enable_detailed_eval=enable_detailed_eval, use_philly=use_philly)
     roidb = imdb.gt_roidb()
 
     # get test data iter

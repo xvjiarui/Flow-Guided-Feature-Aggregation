@@ -54,6 +54,7 @@ sys.path.insert(0, os.path.join(curr_path, '../external/mxnet', config.MXNET_VER
 import shutil
 import numpy as np
 import mxnet as mx
+import command
 
 from symbols import *
 from core import callback, metric
@@ -82,6 +83,10 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, pretrained_flow, epo
     # print config
     pprint.pprint(config)
     logger.info('training config:{}\n'.format(pprint.pformat(config)))
+
+    git_commit_id = command.getoutput('git rev-parse HEAD')
+    print("Git commit id:", git_commit_id)
+    logger.info('Git commit id: {}'.format(git_commit_id))
 
     # load dataset and prepare imdb for training
     image_sets = [iset for iset in config.dataset.image_set.split('+')]
