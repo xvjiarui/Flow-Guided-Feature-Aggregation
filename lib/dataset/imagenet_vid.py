@@ -381,7 +381,7 @@ class ImageNetVID(IMDB):
         annocache = os.path.join(self.cache_path, self.name + '_annotations.pkl')
 
         filename = self.get_result_file_template().format('all')
-        ap = vid_eval(filename, annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5, use_philly=self.use_philly)
+        ap = vid_eval(False, filename, annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5, use_philly=self.use_philly)
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
