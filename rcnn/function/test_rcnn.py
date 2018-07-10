@@ -33,7 +33,7 @@ def test_rcnn(cfg, dataset, image_set, root_path, dataset_path,
     # load symbol and testing data
     sym_instance = eval(cfg.symbol + '.' + cfg.symbol)()
     sym = sym_instance.get_symbol(cfg, is_train=False)
-    imdb = eval(dataset)(image_set, root_path, dataset_path, cfg.dataset.motion_iou_path, result_path=output_path, use_philly=False)
+    imdb = eval(dataset)(image_set, root_path, dataset_path, cfg.dataset.motion_iou_path, result_path=output_path, use_philly=use_philly)
     roidb = imdb.gt_roidb()
 
     # get test data iter

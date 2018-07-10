@@ -381,7 +381,7 @@ class ImageNetVID(IMDB):
         annocache = os.path.join(self.cache_path, self.name + '_annotations.pkl')
 
         filename = self.get_result_file_template().format('all')
-        ap = vid_eval(filename, annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5)
+        ap = vid_eval(filename, annopath, imageset_file, self.classes_map, annocache, ovthresh=0.5, use_philly=self.use_philly)
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
@@ -426,7 +426,7 @@ class ImageNetVID(IMDB):
             area_ranges = [[0, 1e5 * 1e5]]
 
         ap = vid_eval_motion(multifiles, filenames, annopath, imageset_file, self.classes_map, annocache, self.motion_iou_path,
-                             motion_ranges, area_ranges, ovthresh=0.5)
+                             motion_ranges, area_ranges, ovthresh=0.5, use_philly=self.use_philly)
 
         for motion_index, motion_range in enumerate(motion_ranges):
             for area_index, area_range in enumerate(area_ranges):

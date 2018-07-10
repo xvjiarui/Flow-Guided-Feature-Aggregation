@@ -16,12 +16,14 @@ import scipy.io as sio
 import copy
 
 
-def parse_vid_rec(filename, classhash, img_ids, defaultIOUthr=0.5, pixelTolerance=10):
+def parse_vid_rec(filename, classhash, img_ids, defaultIOUthr=0.5, pixelTolerance=10, use_philly=False):
     """
     parse imagenet vid record into a dictionary
     :param filename: xml file path
     :return: list of dict
     """
+    if use_philly:
+        filename = filename.replace('Annotations', 'Annotations.zip@/Annotations')
     import xml.etree.ElementTree as ET
     tree = ET.parse(filename)
     objects = []
@@ -69,7 +71,7 @@ def vid_ap(rec, prec):
     return ap
 
 
-def vid_eval_motion(multifiles, detpath, annopath, imageset_file, classname_map, annocache, motion_iou_file, motion_ranges, area_ranges, ovthresh=0.5):
+def vid_eval_motion(multifiles, detpath, annopath, imageset_file, classname_map, annocache, motion_iou_file, motion_ranges, area_ranges, ovthresh=0.5, use_philly=False):
     """
     imagenet vid evaluation
     :param detpath: detection results detpath.format(classname)
@@ -90,7 +92,7 @@ def vid_eval_motion(multifiles, detpath, annopath, imageset_file, classname_map,
     if not os.path.isfile(annocache):
         recs = []
         for ind, image_filename in enumerate(img_basenames):
-            recs.append(parse_vid_rec(annopath.format('VID/' + image_filename), classhash, gt_img_ids[ind]))
+            recs.append(parse_vid_rec(annopath.format('VID/' + image_filename), classhash, gt_img_ids[ind], use_philly=use_philly))
             if ind % 100 == 0:
                 print 'reading annotations for {:d}/{:d}'.format(ind + 1, len(img_basenames))
         print 'saving annotations cache to {:s}'.format(annocache)
