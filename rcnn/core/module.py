@@ -963,6 +963,10 @@ class MutableModule(BaseModule):
         if not isinstance(eval_metric, metric.EvalMetric):
             eval_metric = metric.create(eval_metric)
 
+        if epoch_end_callback is not None:
+            for callback in _as_list(epoch_end_callback):
+                callback(-1, self.symbol, arg_params, aux_params)
+
         ################################################################################
         # training loop
         ################################################################################
