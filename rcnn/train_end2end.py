@@ -85,7 +85,8 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, epoch, prefix, begin
     # load dataset and prepare imdb for training
     image_sets = [iset for iset in config.dataset.image_set.split('+')]
     roidbs = [load_gt_roidb(config.dataset.dataset, image_set, config.dataset.root_path, config.dataset.dataset_path,
-                            flip=config.TRAIN.FLIP)
+                            motion_iou_path=config.dataset.motion_iou_path,
+                            flip=config.TRAIN.FLIP, use_philly=args.usePhilly)
               for image_set in image_sets]
     roidb = merge_roidb(roidbs)
     roidb = filter_roidb(roidb, config)
@@ -176,7 +177,7 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, epoch, prefix, begin
     stds = np.tile(np.array(config.TRAIN.BBOX_STDS), 2 if config.CLASS_AGNOSTIC else config.dataset.NUM_CLASSES)
     epoch_end_callback = [mx.callback.module_checkpoint(mod, prefix, period=1, save_optimizer_states=True), callback.do_checkpoint(prefix, means, stds)]
     # decide learning rate
-    base_lr = lr
+    base_lr = lr * len(ctx) * cfg.TRAIN.BATCH_IMAGES
     lr_factor = config.TRAIN.lr_factor
     lr_epoch = [float(epoch) for epoch in lr_step.split(',')]
     lr_epoch_diff = [epoch - begin_epoch for epoch in lr_epoch if epoch > begin_epoch]
@@ -189,7 +190,7 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, epoch, prefix, begin
                         'wd': config.TRAIN.wd,
                         'learning_rate': lr,
                         'lr_scheduler': lr_scheduler,
-                        'rescale_grad': 1.0,
+                        'rescale_grad': 1.0 / (len(ctx)*cfg.TRAIN.BATCH_IMAGES),
                         'clip_gradient': None}
 
     if not isinstance(train_data, PrefetchingIter):

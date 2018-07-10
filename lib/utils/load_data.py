@@ -10,10 +10,10 @@ import numpy as np
 from dataset import *
 
 
-def load_gt_roidb(dataset_name, image_set_name, root_path, dataset_path, result_path=None,
+def load_gt_roidb(dataset_name, image_set_name, root_path, dataset_path, motion_iou_path, result_path=None,
                   flip=False, use_philly=False):
     """ load ground truth roidb """
-    imdb = eval(dataset_name)(image_set_name, root_path, dataset_path, result_path, use_philly=use_philly)
+    imdb = eval(dataset_name)(image_set_name, root_path, dataset_path, motion_iou_path, result_path, use_philly=use_philly)
     roidb = imdb.gt_roidb()
     if flip:
         roidb = imdb.append_flipped_images(roidb)
