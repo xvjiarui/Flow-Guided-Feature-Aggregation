@@ -177,7 +177,8 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, epoch, prefix, begin
     stds = np.tile(np.array(config.TRAIN.BBOX_STDS), 2 if config.CLASS_AGNOSTIC else config.dataset.NUM_CLASSES)
     epoch_end_callback = [mx.callback.module_checkpoint(mod, prefix, period=1, save_optimizer_states=True), callback.do_checkpoint(prefix, means, stds)]
     # decide learning rate
-    base_lr = lr * len(ctx) * config.TRAIN.BATCH_IMAGES
+    # base_lr = lr * len(ctx) * config.TRAIN.BATCH_IMAGES
+    base_lr = lr
     lr_factor = config.TRAIN.lr_factor
     lr_epoch = [float(epoch) for epoch in lr_step.split(',')]
     lr_epoch_diff = [epoch - begin_epoch for epoch in lr_epoch if epoch > begin_epoch]
@@ -190,7 +191,7 @@ def train_net(args, ctx, pretrained_dir, pretrained_resnet, epoch, prefix, begin
                         'wd': config.TRAIN.wd,
                         'learning_rate': lr,
                         'lr_scheduler': lr_scheduler,
-                        'rescale_grad': 1.0 / (len(ctx)*config.TRAIN.BATCH_IMAGES),
+                        'rescale_grad': 1.0,
                         'clip_gradient': None}
 
     if not isinstance(train_data, PrefetchingIter):

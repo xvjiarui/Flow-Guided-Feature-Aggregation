@@ -60,9 +60,13 @@ class resnet_v1_101_rcnn(resnet_v1_101_rcnn_base):
             rpn_cls_prob = mx.sym.SoftmaxOutput(data=rpn_cls_score_reshape, label=rpn_label, multi_output=True,
                                                    normalization='valid', use_ignore=True, ignore_label=-1, name="rpn_cls_prob")
 
-            # bounding box regression
-            rpn_bbox_loss_ = rpn_bbox_weight * mx.sym.smooth_l1(name='rpn_bbox_loss_', scalar=3.0, data=(rpn_bbox_pred - rpn_bbox_target))
-
+            if cfg.network.NORMALIZE_RPN:
+                rpn_bbox_loss_ = rpn_bbox_weight * mx.sym.smooth_l1(name='rpn_bbox_loss_', scalar=1.0, data=(rpn_bbox_pred - rpn_bbox_target))
+                rpn_bbox_pred = mx.sym.Custom(
+                    bbox_pred=rpn_bbox_pred, op_type='rpn_inv_normalize', num_anchors=num_anchors,
+                    bbox_mean=cfg.network.ANCHOR_MEANS, bbox_std=cfg.network.ANCHOR_STDS)
+            else:
+                rpn_bbox_loss_ = rpn_bbox_weight * mx.sym.smooth_l1(name='rpn_bbox_loss_', scalar=3.0, data=(rpn_bbox_pred - rpn_bbox_target))
             rpn_bbox_loss = mx.sym.MakeLoss(name='rpn_bbox_loss', data=rpn_bbox_loss_, grad_scale=1.0 / cfg.TRAIN.RPN_BATCH_SIZE)
 
             # ROI proposal
@@ -94,6 +98,10 @@ class resnet_v1_101_rcnn(resnet_v1_101_rcnn_base):
                                                                   cfg=cPickle.dumps(cfg),
                                                                   fg_fraction=cfg.TRAIN.FG_FRACTION)
         else:
+            if cfg.network.NORMALIZE_RPN:
+                rpn_bbox_pred = mx.sym.Custom(
+                    bbox_pred=rpn_bbox_pred, op_type='rpn_inv_normalize', num_anchors=num_anchors,
+                    bbox_mean=cfg.network.ANCHOR_MEANS, bbox_std=cfg.network.ANCHOR_STDS)
             # ROI Proposal
             rpn_cls_score_reshape = mx.sym.Reshape(
                 data=rpn_cls_score, shape=(0, 2, -1, 0), name="rpn_cls_score_reshape")
