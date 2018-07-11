@@ -11,6 +11,7 @@ from utils.symbol import Symbol
 from operator_py.proposal import *
 from operator_py.proposal_target import *
 from operator_py.box_annotator_ohem import *
+from operator_py.rpn_inv_normalize import *
 from resnet_v1_101_rcnn_base import resnet_v1_101_rcnn_base
 
 
