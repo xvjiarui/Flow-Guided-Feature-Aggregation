@@ -2,7 +2,7 @@
 MXNET_VERSION: "mxnet"
 output_path: "./output/rcnn/imagenet_vid"
 symbol: resnet_v1_101_rcnn
-gpus: '4'
+gpus: '0,1,2,3,4,5,6,7'
 CLASS_AGNOSTIC: true
 SCALES:
 - 600
@@ -54,8 +54,7 @@ dataset:
   dataset_path: "./data/ILSVRC2015"
   image_set: DET_train_30classes+VID_train_15frames
   root_path: "./data"
-  test_image_set: VID_val_videos_tiny
-  motion_iou_path: './lib/dataset/imagenet_vid_groundtruth_motion_iou.mat'
+  test_image_set: VID_val_frames
   proposal: rpn
 TRAIN:
   lr: 0.00025

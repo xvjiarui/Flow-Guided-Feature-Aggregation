@@ -28,15 +28,18 @@ class TestLoader(mx.io.DataIter):
         self.has_rpn = has_rpn
 
         # infer properties from roidb
-        self.size = len(self.roidb)
+        self.size = np.sum([x['frame_seg_len'] for x in self.roidb])
         self.index = np.arange(self.size)
 
         # decide data and label names (only for training)
-        if has_rpn:
-            self.data_name = ['data', 'im_info']
-        else:
-            self.data_name = ['data', 'rois']
+        self.data_name = ['data', 'im_info']
         self.label_name = None
+
+        #
+        self.cur_roidb_index = 0
+        self.cur_frameid = 0
+        self.cur_seg_len = 0
+        self.key_frame_flag = -1
 
         # status variable for synchronization between get_data and get_label
         self.cur = 0
@@ -76,7 +79,12 @@ class TestLoader(mx.io.DataIter):
         if self.iter_next():
             self.get_batch()
             self.cur += self.batch_size
-            return self.im_info, mx.io.DataBatch(data=self.data, label=self.label,
+            self.cur_frameid += 1
+            if self.cur_frameid == self.cur_seg_len:
+                self.cur_roidb_index += 1
+                self.cur_frameid = 0
+                self.key_frame_flag = 1
+            return self.im_info, self.key_frame_flag, mx.io.DataBatch(data=self.data, label=self.label,
                                    pad=self.getpad(), index=self.getindex(),
                                    provide_data=self.provide_data, provide_label=self.provide_label)
         else:
@@ -92,13 +100,17 @@ class TestLoader(mx.io.DataIter):
             return 0
 
     def get_batch(self):
-        cur_from = self.cur
-        cur_to = min(cur_from + self.batch_size, self.size)
-        roidb = [self.roidb[self.index[i]] for i in range(cur_from, cur_to)]
-        if self.has_rpn:
-            data, label, im_info = get_rpn_testbatch(roidb, self.cfg)
-        else:
-            data, label, im_info = get_rcnn_testbatch(roidb, self.cfg)
+        cur_roidb = self.roidb[self.cur_roidb_index].copy()
+        cur_roidb['image'] = cur_roidb['pattern'] % self.cur_frameid
+        # update seg_id
+        cur_roidb['frame_seg_id'] = self.cur_frameid
+        self.cur_seg_len = cur_roidb['frame_seg_len']
+        data, label, im_info = get_rpn_testbatch([cur_roidb], self.cfg)
+        if self.cur_frameid == 0: # new video
+                self.key_frame_flag = 0
+        else:       # normal frame
+            self.key_frame_flag = 2
+
         self.data = [[mx.nd.array(idata[name]) for name in self.data_name] for idata in data]
         self.im_info = im_info
 

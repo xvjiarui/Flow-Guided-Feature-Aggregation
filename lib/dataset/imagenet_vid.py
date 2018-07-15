@@ -21,10 +21,12 @@ import time
 from imdb import IMDB
 from imagenet_vid_eval import vid_eval
 from imagenet_vid_eval_motion import vid_eval_motion
+from imagenet_vid_eval_stability import get_vid_det_np, parse_vid_gt, assign_eval
 from ds_utils import unique_boxes, filter_small_boxes
 from nms.seq_nms import seq_nms
 from nms.nms import py_nms_wrapper, cpu_nms_wrapper, gpu_nms_wrapper
-
+from itertools import groupby
+from tqdm import tqdm
 
 class ImageNetVID(IMDB):
     def __init__(self, image_set, root_path, dataset_path, motion_iou_path, result_path=None, enable_detailed_eval=True, use_philly=False):
@@ -243,12 +245,38 @@ class ImageNetVID(IMDB):
         info = self.do_python_eval_gen()
         return info
 
+    def evaluate_detections_stability_multiprocess(self, detections):
+        """
+        top level evaluations
+        :param detections: result matrix, [bbox, confidence]
+        :return: None
+        """
+        # make all these folders for results
+        result_dir = os.path.join(self.result_path, 'results')
+        if not os.path.exists(result_dir):
+            os.mkdir(result_dir)
+
+        self.write_vid_stability_results_multiprocess(detections)
+        info = self.do_python_stability_eval_gen()
+        return info
+
     def get_result_file_template(self, gpu_id):
         """
         :return: a string template
         """
         res_file_folder = os.path.join(self.result_path, 'results')
         filename = 'det_' + self.image_set + str(gpu_id) + '_{:s}.txt'
+        path = os.path.join(res_file_folder, filename)
+        return path
+
+    def get_stability_file_template(self, image_index):
+        """
+        :return: a string template
+        """
+        res_file_folder = os.path.join(self.result_path, 'results', image_index[:-7])
+        if not os.path.exists(res_file_folder):
+            os.makedirs(res_file_folder)
+        filename = '{:s}.txt'
         path = os.path.join(res_file_folder, filename)
         return path
 
@@ -443,4 +471,114 @@ class ImageNetVID(IMDB):
                 info_str += 'Mean AP@0.5 = {:.4f}'.format(np.mean(
                     [ap[motion_index][area_index][i] for i in range(len(ap[motion_index][area_index])) if
                      ap[motion_index][area_index][i] >= 0]))
+        return info_str
+
+    def write_vid_stability_results_multiprocess(self, detections):
+        print 'Writing {} ImageNetVID stability results file'.format('all')
+        filename = self.get_result_file_template().format('all')
+        for detection in tqdm(detections):
+            all_boxes = detection[0]
+            frame_ids = detection[1]
+            start_idx = 0
+            sum_frame_ids = np.cumsum(self.frame_seg_len)
+            first_true_id = frame_ids[0]
+            start_video = np.searchsorted(sum_frame_ids, first_true_id)
+
+            for im_ind in tqdm(range(1, len(frame_ids))):
+                t = time.time()
+                true_id = frame_ids[im_ind]
+                video_index = np.searchsorted(sum_frame_ids, true_id)
+                if (video_index != start_video):  # reprensents a new video
+                    t1 = time.time()
+                    video = [all_boxes[j][start_idx:im_ind] for j in range(1, self.num_classes)]
+                    cur_video_det_file = self.get_stability_file_template(self.image_set_index[start_video]).format('det')
+                    np.savetxt(cur_video_det_file, get_vid_det_np(video), fmt='%.2f', delimiter=',')
+                    start_idx = im_ind
+                    # print 'start_video=', start_video
+                    start_video = video_index
+                    t2 = time.time()
+                    # print 'video_index=', video_index, '  time=', t2 - t1
+            # last video
+            video = [all_boxes[j][start_idx:im_ind] for j in range(1, self.num_classes)]
+            cur_video_det_file = self.get_stability_file_template(self.image_set_index[start_video]).format('det')
+            np.savetxt(cur_video_det_file, get_vid_det_np(video), fmt='%.2f', delimiter=',')
+
+    def do_python_stability_eval_gen(self, thresh=0.5):
+        """
+        python evaluation wrapper
+        :return: info_str
+        """
+        info_str = ''
+        annopath = os.path.join(self.data_path, 'Annotations', '{0!s}.xml')
+        imageset_file = os.path.join(self.data_path, 'ImageSets', self.image_set + '_eval.txt')
+        annocache = os.path.join(self.cache_path, self.name + '_annotations.pkl')
+
+        for i in range(len(self.pattern)):
+            cur_video_gt_file =  self.get_stability_file_template(self.image_set_index[i]).format('gt')
+            cur_video_result = [frame for j in range(self.frame_seg_len[i]) for frame in parse_vid_gt(annopath.format('VID/'+self.pattern[i]%j), j)]
+            # import itertools
+            # cur_video_result = list(itertools.chain.from_iterable([parse_vid_gt(annopath.format('VID/'+self.pattern[i]%j), j) \
+            #                                         for j in range(self.frame_seg_len[i])]))
+            cur_video_result = np.vstack(cur_video_result)
+            np.savetxt(cur_video_gt_file, cur_video_result, fmt='%.2f', delimiter=',')
+        vid_path = os.path.join(self.result_path, 'results', 'val')
+        vid_list = [d for d in os.listdir(vid_path) if os.path.isdir(os.path.join(vid_path, d))]
+        vid_list = sorted(vid_list, key = lambda x: int(x.split('_')[2]))
+
+        F_err_list = []
+        C_err_list = []
+        R_err_list = []
+        for vid_name in vid_list:
+            print 'processing {}'.format(vid_name)
+            cur_vid_path = os.path.join(vid_path, vid_name)
+            vid_gt = np.loadtxt(os.path.join(cur_vid_path, 'gt.txt'), delimiter=',')
+
+            # filter out gt that is ignored (not exists in Imagenet VID)
+            vid_gt = vid_gt[vid_gt[:, 6] != 0]
+
+            # change [x, y, w, h] back to [x_min, y_min, x_max, y_max]
+            vid_gt[:, 2:4] -= 1.
+            vid_gt[:, 4:6] += vid_gt[:, 2:4]
+
+            # sort according to frame_seg_id
+            vid_gt = sorted(vid_gt, key = lambda x: x[0])
+
+            # group detections by frame_seg_id
+            gt_traj = {}
+            for frame_seg_id, frame_gt in groupby(vid_gt, key = lambda x: x[0]):
+                frame_seg_id = int(frame_seg_id)
+                frame_gt = np.array(list(frame_gt))
+                gt_bbox = frame_gt[:, 2:6]
+                traj_id = frame_gt[:, 1]
+                gt_traj[frame_seg_id] = {'bbox': np.array(gt_bbox, dtype=np.float32), 'det': [False]*len(traj_id), 'traj_id': traj_id}
+
+            vid_det = np.loadtxt(os.path.join(cur_vid_path, 'det.txt'), delimiter=',')
+            vid_det = np.array(sorted(vid_det, key = lambda x: x[0]))
+            vid_det[:, 2:4] -= 1.
+            vid_det[:, 4:6] += vid_det[:, 2:4]
+
+            # group detections by frame_seg_id
+            det_traj = {}
+            for frame_seg_id, frame_det in groupby(vid_det, key = lambda x: x[0]):
+                frame_seg_id = int(frame_seg_id)
+                frame_det = np.array(list(frame_det))
+                # detection [x_min, y_min, x_max, y_max, score]
+                det_bbox = np.array(list(frame_det[:, 2:7]))
+                det_traj[frame_seg_id] = {'bbox': det_bbox}
+
+            with open(os.path.join(cur_vid_path, 'stability.txt'), 'w') as f:
+                _err, _c, _r = assign_eval(gt_traj, det_traj, cur_vid_path, thresh)
+                F_err_list.append(_err)
+                C_err_list.append(_c)
+                R_err_list.append(_r)
+                print thresh, _err, _c, _r
+                f.write('%.2f, %.2f, %.2f, %.2f\n' % (thresh, _err, _c, _r))
+
+        print(np.nanmean(F_err_list), np.nanmean(C_err_list), np.nanmean(R_err_list))
+
+        info_str = "In total processed {} videos, the mean fragment error is {}, the mean center error is {}, the mean ratio error is {}".format(
+            len(vid_list), np.nanmean(F_err_list), np.nanmean(C_err_list), np.nanmean(R_err_list))
+
+        print(info_str)
+
         return info_str
