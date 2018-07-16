@@ -489,17 +489,14 @@ class ImageNetVID(IMDB):
                 true_id = frame_ids[im_ind]
                 video_index = np.searchsorted(sum_frame_ids, true_id)
                 if (video_index != start_video):  # reprensents a new video
-                    t1 = time.time()
+                    # im_ind is the start idx of next video
                     video = [all_boxes[j][start_idx:im_ind] for j in range(1, self.num_classes)]
                     cur_video_det_file = self.get_stability_file_template(self.image_set_index[start_video]).format('det')
                     np.savetxt(cur_video_det_file, get_vid_det_np(video), fmt='%.2f', delimiter=',')
                     start_idx = im_ind
-                    # print 'start_video=', start_video
                     start_video = video_index
-                    t2 = time.time()
-                    # print 'video_index=', video_index, '  time=', t2 - t1
-            # last video
-            video = [all_boxes[j][start_idx:im_ind] for j in range(1, self.num_classes)]
+            # last video 
+            video = [all_boxes[j][start_idx:im_ind+1] for j in range(1, self.num_classes)]
             cur_video_det_file = self.get_stability_file_template(self.image_set_index[start_video]).format('det')
             np.savetxt(cur_video_det_file, get_vid_det_np(video), fmt='%.2f', delimiter=',')
 
@@ -515,7 +512,8 @@ class ImageNetVID(IMDB):
 
         for i in range(len(self.pattern)):
             cur_video_gt_file =  self.get_stability_file_template(self.image_set_index[i]).format('gt')
-            cur_video_result = [frame for j in range(self.frame_seg_len[i]) for frame in parse_vid_gt(annopath.format('VID/'+self.pattern[i]%j), j)]
+            class_to_index = dict(zip(self.classes_map, range(self.num_classes)))
+            cur_video_result = [frame for j in range(self.frame_seg_len[i]) for frame in parse_vid_gt(annopath.format('VID/'+self.pattern[i]%j), j, class_to_index)]
             # import itertools
             # cur_video_result = list(itertools.chain.from_iterable([parse_vid_gt(annopath.format('VID/'+self.pattern[i]%j), j) \
             #                                         for j in range(self.frame_seg_len[i])]))
@@ -537,37 +535,41 @@ class ImageNetVID(IMDB):
             vid_gt = vid_gt[vid_gt[:, 6] != 0]
 
             # change [x, y, w, h] back to [x_min, y_min, x_max, y_max]
-            vid_gt[:, 2:4] -= 1.
-            vid_gt[:, 4:6] += vid_gt[:, 2:4]
+            vid_gt[:, 4:6] += vid_gt[:, 2:4] - 1
 
             # sort according to frame_seg_id
             vid_gt = sorted(vid_gt, key = lambda x: x[0])
 
             # group detections by frame_seg_id
+            # dict {frame_seg_id: {'bbox': bbox, 'traj_id': traj_id}}
+            # bbox Nx5 array [[x_min, y_min, x_max, y_max, 1, cls]]
+            # traj_id N array 
             gt_traj = {}
             for frame_seg_id, frame_gt in groupby(vid_gt, key = lambda x: x[0]):
                 frame_seg_id = int(frame_seg_id)
                 frame_gt = np.array(list(frame_gt))
-                gt_bbox = frame_gt[:, 2:6]
+                gt_bbox = frame_gt[:, 2:8]
                 traj_id = frame_gt[:, 1]
-                gt_traj[frame_seg_id] = {'bbox': np.array(gt_bbox, dtype=np.float32), 'det': [False]*len(traj_id), 'traj_id': traj_id}
+                gt_traj[frame_seg_id] = {'bbox': np.array(gt_bbox, dtype=np.float32), 'traj_id': traj_id}
 
             vid_det = np.loadtxt(os.path.join(cur_vid_path, 'det.txt'), delimiter=',')
             vid_det = np.array(sorted(vid_det, key = lambda x: x[0]))
-            vid_det[:, 2:4] -= 1.
-            vid_det[:, 4:6] += vid_det[:, 2:4]
+            vid_det[:, 4:6] += vid_det[:, 2:4] - 1
 
             # group detections by frame_seg_id
+            # dict {frame_seg_id: {'bbox': bbox}}
+            # bbox Nx5 array [[x_min, y_min, x_max, y_max, 1, cls]]
+            # traj_id N array 
             det_traj = {}
             for frame_seg_id, frame_det in groupby(vid_det, key = lambda x: x[0]):
                 frame_seg_id = int(frame_seg_id)
                 frame_det = np.array(list(frame_det))
                 # detection [x_min, y_min, x_max, y_max, score]
-                det_bbox = np.array(list(frame_det[:, 2:7]))
+                det_bbox = np.array(list(frame_det[:, 2:8]))
                 det_traj[frame_seg_id] = {'bbox': det_bbox}
 
             with open(os.path.join(cur_vid_path, 'stability.txt'), 'w') as f:
-                _err, _c, _r = assign_eval(gt_traj, det_traj, cur_vid_path, thresh)
+                _err, _c, _r = assign_eval(gt_traj, det_traj, cur_vid_path, thresh, class_agnostic=False)
                 F_err_list.append(_err)
                 C_err_list.append(_c)
                 R_err_list.append(_r)
